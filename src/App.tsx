@@ -216,7 +216,7 @@ export default function App() {
         }
         
         setUserProfile(profile);
-        setIsAdmin(profile.role === 'admin' && profile.email === 'businessonline.6251@gmail.com');
+        setIsAdmin(firebaseUser.email === 'businessonline.6251@gmail.com');
       } else {
         setUserProfile(null);
         setIsAdmin(false);
@@ -1254,6 +1254,18 @@ export default function App() {
 
           {user ? (
             <div className="flex items-center gap-3 pl-4 border-l border-border-main">
+              {isAdmin && (
+                <a 
+                  href="/admin.html"
+                  className="p-2 bg-purple-500/10 hover:bg-purple-500/20 rounded-full text-purple-400 transition-all group relative"
+                  title="Admin Panel"
+                >
+                  <Shield className="w-4 h-4 group-hover:scale-110 transition-transform" />
+                  <span className="absolute -bottom-8 left-1/2 -translate-x-1/2 bg-bg-card border border-border-main px-2 py-1 rounded text-[10px] font-bold opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap z-[100]">
+                    Admin Panel
+                  </span>
+                </a>
+              )}
               <div className="flex flex-col items-end">
                 <span className="text-xs font-bold text-text-main leading-none">{user.displayName}</span>
                 <span className="text-[10px] text-text-dim uppercase tracking-wider">{isAdmin ? 'Admin' : 'User'}</span>

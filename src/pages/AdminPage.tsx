@@ -39,11 +39,11 @@ export default function AdminPage({ isAdmin, user, isLoadingAuth }: AdminPagePro
   useEffect(() => {
     // Only redirect if auth loading is finished and user is not an admin
     if (!isLoadingAuth) {
-      if (!isAdmin || user?.email !== 'businessonline.6251@gmail.com') {
+      if (user?.email !== 'businessonline.6251@gmail.com') {
         window.location.href = '/user.html';
       }
     }
-  }, [isAdmin, user, isLoadingAuth]);
+  }, [user, isLoadingAuth]);
 
   const fetchAdminData = async () => {
     if (!isAdmin || isLoadingAuth) return;
