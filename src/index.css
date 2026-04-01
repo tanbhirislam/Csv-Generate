@@ -1,16 +1,54 @@
 @import "tailwindcss";
 
+@theme {
+  --color-theme: var(--theme-color);
+  --color-bg-main: var(--bg-main);
+  --color-bg-card: var(--bg-card);
+  --color-text-main: var(--text-main);
+  --color-text-muted: var(--text-muted);
+  --color-text-dim: var(--text-dim);
+  --color-border-main: var(--border-main);
+  --color-bg-input: var(--bg-input);
+  --color-bg-hover: var(--bg-hover);
+  --color-primary: var(--primary-color);
+  --color-accent: var(--accent-color);
+}
+
+:root {
+  --bg-main: #121212;
+  --bg-card: #1a1a1a;
+  --text-main: #ffffff;
+  --text-muted: rgba(255, 255, 255, 0.4);
+  --text-dim: rgba(255, 255, 255, 0.2);
+  --border-main: rgba(255, 255, 255, 0.1);
+  --bg-input: rgba(255, 255, 255, 0.05);
+  --bg-hover: rgba(255, 255, 255, 0.08);
+  --primary-color: #3b82f6;
+  --accent-color: #8b5cf6;
+}
+
+.light {
+  --bg-main: #ffffff;
+  --bg-card: #f8fafc;
+  --text-main: #0f172a;
+  --text-muted: #475569;
+  --text-dim: #94a3b8;
+  --border-main: #e2e8f0;
+  --bg-input: #f1f5f9;
+  --bg-hover: #e2e8f0;
+}
+
 @layer base {
   input[type="range"] {
-    @apply appearance-none bg-white/10 h-1.5 rounded-lg;
+    @apply appearance-none bg-bg-input h-1.5 rounded-lg;
   }
   
   input[type="range"]::-webkit-slider-thumb {
-    @apply appearance-none w-4 h-4 bg-orange-500 rounded-full cursor-pointer shadow-lg shadow-orange-500/20;
+    @apply appearance-none w-4 h-4 bg-theme rounded-full cursor-pointer shadow-lg shadow-theme/20;
   }
   
   input[type="range"]::-moz-range-thumb {
-    @apply w-4 h-4 bg-orange-500 rounded-full cursor-pointer border-none shadow-lg shadow-orange-500/20;
+    @apply w-4 h-4 bg-theme rounded-full cursor-pointer border-none shadow-lg shadow-theme/20;
   }
 
   .custom-scrollbar::-webkit-scrollbar {
@@ -22,10 +60,73 @@
   }
 
   .custom-scrollbar::-webkit-scrollbar-thumb {
-    @apply bg-white/10 rounded-full hover:bg-white/20 transition-colors;
+    @apply bg-bg-input rounded-full hover:bg-bg-hover transition-colors;
   }
 }
 
 body {
-  @apply bg-[#121212] text-white;
+  @apply bg-bg-main text-text-main transition-colors duration-300;
+}
+
+/* Global overrides for light mode to ensure white text becomes dark */
+.light .text-white {
+  color: var(--text-main) !important;
+}
+.light .text-white\/90 {
+  color: var(--text-main) !important;
+  opacity: 0.9;
+}
+.light .text-white\/80 {
+  color: var(--text-main) !important;
+  opacity: 0.8;
+}
+.light .text-white\/70 {
+  color: var(--text-main) !important;
+  opacity: 0.7;
+}
+.light .text-white\/60 {
+  color: var(--text-muted) !important;
+}
+.light .text-white\/50 {
+  color: var(--text-muted) !important;
+  opacity: 0.8;
+}
+.light .text-white\/40 {
+  color: var(--text-dim) !important;
+}
+.light .text-white\/30 {
+  color: var(--text-dim) !important;
+  opacity: 0.8;
+}
+.light .text-white\/20 {
+  color: var(--text-dim) !important;
+  opacity: 0.5;
+}
+.light .text-white\/10 {
+  color: var(--text-dim) !important;
+  opacity: 0.3;
+}
+.light .text-white\/5 {
+  color: var(--text-dim) !important;
+  opacity: 0.2;
+}
+
+/* Background overrides */
+.light .bg-white\/5 {
+  background-color: var(--bg-input) !important;
+}
+.light .bg-white\/10 {
+  background-color: var(--bg-hover) !important;
+}
+.light .bg-white\/20 {
+  background-color: var(--bg-hover) !important;
+  opacity: 0.8;
+}
+
+/* Border overrides */
+.light .border-white\/5 {
+  border-color: var(--border-main) !important;
+}
+.light .border-white\/10 {
+  border-color: var(--border-main) !important;
 }

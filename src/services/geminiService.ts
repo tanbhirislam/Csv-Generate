@@ -78,6 +78,7 @@ export async function generateMetadata(
     fileName?: string;
     platform?: string;
     provider?: string;
+    avoidTitles?: string[];
   }
 ) {
   const provider = settings.provider || 'Google Gemini';
@@ -86,6 +87,7 @@ export async function generateMetadata(
   if (!apiKey) throw new Error(`API Key for ${provider} is missing.`);
 
   const platformContext = settings.platform ? `Target Platform: ${settings.platform}` : "";
+  const isStock = ['Adobe Stock', 'Shutterstock', 'Freepik', 'Vecteezy', 'Creative Market', 'Getty Images', 'iStock', 'Dreamstime'].includes(settings.platform || '');
 
   const titleConstraint = settings.titleLengthUnit === 'Words' 
     ? `MAX ${settings.titleLength} words` 
@@ -97,29 +99,48 @@ export async function generateMetadata(
         ? `MAX ${settings.descriptionLength} words` 
         : `MAX ${settings.descriptionLength} characters`);
 
+  const avoidContext = settings.avoidTitles && settings.avoidTitles.length > 0 
+    ? `\nCRITICAL: AVOID using these titles as they are already in use for similar content in this batch: ${settings.avoidTitles.join(', ')}. Create a UNIQUE variation.`
+    : "";
+
   const systemInstructions = `
-    You are an expert SEO metadata generator for stock photography and vector platforms.
-    ${platformContext}
+    You are a world-class ${isStock ? 'Microstock Metadata Expert' : 'Freelance SEO & Conversion Expert'}. Your goal is to optimize metadata for ${settings.platform}.
+    
+    CRITICAL: DO NOT BE ROBOTIC. Standard AI often uses generic, fluffy language. You must avoid this.
+    Instead, use "Buyer-First" language. Think about exactly what a buyer types into a search bar when they have a problem to solve.
+    
+    ${isStock ? `
+    MICROSTOCK "SIMILAR CONTENT" SAFEGUARD:
+    - If you are analyzing multiple similar designs, you MUST create unique variations.
+    - Do not repeat the same title or keywords across similar assets.
+    - Use different synonyms, angles, and specific details to differentiate.
+    ${avoidContext}
+    ` : `
+    FREELANCE GIG OPTIMIZATION:
+    - Focus on "Buyer-First" language.
+    - Use "High-Intent" titles.
+    `}
     
     STRICT CONSTRAINTS:
-    1. Title: ${titleConstraint}. Do not exceed this. Focus on keywords.
-    2. Description: ${descriptionConstraint}. Do not exceed this.
-    3. Keywords: Provide EXACTLY ${settings.keywordsCount} relevant, high-traffic keywords. This is a strict requirement.
-    4. Style/Context: ${settings.customPrompt || "Professional stock metadata"}
+    1. Title: ${titleConstraint}. ${isStock ? 'Focus on descriptive, keyword-rich titles.' : 'Use patterns like "I will [Action] [Service] for [Benefit]".'}
+    2. Description: ${descriptionConstraint}. ${isStock ? 'Describe the scene accurately.' : 'Focus on benefits, not just features.'}
+    3. Keywords/Tags: Provide EXACTLY ${settings.keywordsCount} relevant, high-traffic tags.
+    4. Style: ${settings.customPrompt || "Professional, persuasive, and search-optimized."}
     
-    Instructions:
-    - Focus on commercial value and searchability.
-    - Avoid generic words like "image", "photo", or "vector".
-    - Ensure the title and description are natural but keyword-rich.
-    - The keywords array must contain exactly ${settings.keywordsCount} items.
+    ANTI-ROBOTIC RULES:
+    - NO generic phrases like "I am a professional...", "I will provide high quality...", "Expert in...".
+    - NO "fluff" words. Every word must serve a search or conversion purpose.
+    - Use specific industry terminology that buyers use.
     
-    Return the result in JSON format with keys: "title", "description", "keywords", "category".
-    - "category": For Adobe Stock, provide a relevant category name (e.g., Animals, Buildings and Architecture, Business, Drinks, Environment, States of Mind, Food, Graphic Resources, Hobbies and Leisure, Industry, Landscapes, Lifestyle, People, Plants and Flowers, Culture and Religion, Science, Social Issues, Sports, Technology, Transport, Travel).
+    Return the result in JSON format with keys: "title", "description", "keywords".
   `;
 
-  const userPrompt = imageBase64 
-    ? `Analyze the provided image and generate metadata.`
-    : `Analyze this file name: "${settings.fileName}" and generate metadata for a stock asset.`;
+  const userPrompt = `
+    Service/Gig Description: "${settings.fileName}"
+    Target Keywords (if any): "${settings.customPrompt}"
+    
+    Optimize this metadata for ${settings.platform}.
+  `;
 
   return retryWithBackoff(async () => {
     try {
@@ -145,8 +166,7 @@ export async function generateMetadata(
                 keywords: {
                   type: Type.ARRAY,
                   items: { type: Type.STRING }
-                },
-                category: { type: Type.STRING }
+                }
               },
               required: ["title", "description", "keywords"]
             }

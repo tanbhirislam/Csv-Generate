@@ -1,5 +1,5 @@
 {
-  "name": "Generate Csv Pro",
-  "description": "AI-powered metadata generator for stock contributors. Generate titles, descriptions, and keywords for images and vectors, then export to CSV for platforms like Adobe Stock and Shutterstock.",
+  "name": "SEO Gig Optimizer",
+  "description": "AI-powered metadata optimizer for freelancers and microstock contributors (Adobe Stock, Shutterstock, Getty Images, iStock, Dreamstime, Vecteezy, etc.). Features 'Similar Content' safeguard to generate unique, non-robotic titles and tags optimized for search algorithms.",
   "requestFramePermissions": []
 }

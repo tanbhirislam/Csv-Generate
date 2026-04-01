@@ -22,7 +22,24 @@ import {
   EyeOff,
   Youtube,
   Facebook,
-  MessageCircle
+  MessageCircle,
+  Sun,
+  Moon,
+  Briefcase,
+  ShoppingBag,
+  Search,
+  Camera,
+  Zap,
+  Sparkles,
+  Globe,
+  ShieldCheck,
+  Cloud,
+  Layout,
+  Users,
+  Shield,
+  BarChart3,
+  LogOut,
+  LogIn
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import Papa from 'papaparse';
@@ -30,6 +47,12 @@ import JSZip from 'jszip';
 import { cn } from './lib/utils';
 import { GeneratedMetadata, GenerationSettings, Platform, AIProvider, SavedKey, HistoryItem } from './types';
 import { generateMetadata } from './services/geminiService';
+import { auth, db, loginWithGoogle, logout, UserProfile, AppSetting, UsageLog } from './firebase';
+import { Routes, Route, useNavigate, Navigate, Link } from 'react-router-dom';
+import AdminPage from './pages/AdminPage';
+import LoginPage from './pages/LoginPage';
+import { onAuthStateChanged, User as FirebaseUser } from 'firebase/auth';
+import { doc, getDoc, setDoc, collection, query, getDocs, updateDoc, serverTimestamp, Timestamp, onSnapshot } from 'firebase/firestore';
 
 import * as pdfjsLib from 'pdfjs-dist';
 
@@ -38,7 +61,7 @@ const PDFJS_VERSION = '5.5.207';
 pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${PDFJS_VERSION}/pdf.worker.min.mjs`;
 
 const PLATFORMS: Platform[] = [
-  'General', 'Adobe Stock', 'Shutterstock', 'Freepik', 'Getty Images', 'iStock', 'Dreamstime', 'Vecteezy'
+  'Adobe Stock', 'Shutterstock', 'Freepik', 'Vecteezy', 'Getty Images', 'iStock', 'Dreamstime', 'Fiverr', 'Upwork', 'Etsy', 'General SEO'
 ];
 
 interface FileWithMetadata extends GeneratedMetadata {
@@ -61,7 +84,7 @@ const PROVIDER_MODELS: Record<AIProvider, string[]> = {
 export default function App() {
   const [files, setFiles] = useState<FileWithMetadata[]>([]);
   const [generating, setGenerating] = useState(false);
-  const [activePlatform, setActivePlatform] = useState<Platform>('Adobe Stock');
+  const [activePlatform, setActivePlatform] = useState<Platform>('Fiverr');
   const [settings, setSettings] = useState<GenerationSettings>(() => {
     const saved = localStorage.getItem('generation_settings');
     const defaultSettings: GenerationSettings = {
@@ -74,7 +97,8 @@ export default function App() {
       descriptionLengthUnit: 'Words',
       keywordsCount: 30,
       customPrompt: 'Default (Recommended)',
-      themeColor: '#f97316',
+      themeColor: '#3b82f6',
+      themeMode: 'dark',
       autoDownload: false,
       autoDownloadZip: false,
       changeFileExtension: 'Default'
@@ -95,6 +119,12 @@ export default function App() {
   const [isPromptModalOpen, setIsPromptModalOpen] = useState(false);
   const [isHistoryOpen, setIsHistoryOpen] = useState(false);
   const [isCompletionModalOpen, setIsCompletionModalOpen] = useState(false);
+  const navigate = useNavigate();
+  const [user, setUser] = useState<FirebaseUser | null>(null);
+  const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
+  const [isAdmin, setIsAdmin] = useState(false);
+  const [isLoadingAuth, setIsLoadingAuth] = useState(true);
+  const [adminSettings, setAdminSettings] = useState<AppSetting | null>(null);
   const [previewFile, setPreviewFile] = useState<FileWithMetadata | null>(null);
   const [activeProvider, setActiveProvider] = useState<AIProvider>('Google Gemini');
   const [selectedModel, setSelectedModel] = useState('Gemini 3.1 Flash Lite');
@@ -129,6 +159,150 @@ export default function App() {
   useEffect(() => {
     localStorage.setItem('generation_history', JSON.stringify(history));
   }, [history]);
+
+  useEffect(() => {
+    if (settings.themeMode === 'light') {
+      document.documentElement.classList.add('light');
+    } else {
+      document.documentElement.classList.remove('light');
+    }
+  }, [settings.themeMode]);
+
+  useEffect(() => {
+    if (adminSettings) {
+      // Update favicon
+      if (adminSettings.faviconUrl) {
+        let link: HTMLLinkElement | null = document.querySelector("link[rel~='icon']");
+        if (!link) {
+          link = document.createElement('link');
+          link.rel = 'icon';
+          document.getElementsByTagName('head')[0].appendChild(link);
+        }
+        link.href = adminSettings.faviconUrl;
+      }
+      
+      // Update site title
+      document.title = adminSettings.siteName;
+      
+      // Update primary color CSS variable
+      document.documentElement.style.setProperty('--primary-color', adminSettings.primaryColor);
+      document.documentElement.style.setProperty('--accent-color', adminSettings.accentColor);
+    }
+  }, [adminSettings]);
+
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
+      setUser(firebaseUser);
+      if (firebaseUser) {
+        // Sync user profile
+        const userRef = doc(db, 'users', firebaseUser.uid);
+        const userSnap = await getDoc(userRef);
+        
+        let profile: UserProfile;
+        if (!userSnap.exists()) {
+          profile = {
+            uid: firebaseUser.uid,
+            email: firebaseUser.email || '',
+            displayName: firebaseUser.displayName || 'User',
+            photoURL: firebaseUser.photoURL || '',
+            role: firebaseUser.email === 'businessonline.6251@gmail.com' ? 'admin' : 'user',
+            createdAt: Timestamp.now(),
+            lastLogin: Timestamp.now()
+          };
+          await setDoc(userRef, profile);
+        } else {
+          profile = userSnap.data() as UserProfile;
+          await updateDoc(userRef, { lastLogin: serverTimestamp() });
+        }
+        
+        setUserProfile(profile);
+        setIsAdmin(profile.role === 'admin' && profile.email === 'businessonline.6251@gmail.com' && firebaseUser.emailVerified);
+      } else {
+        setUserProfile(null);
+        setIsAdmin(false);
+      }
+      setIsLoadingAuth(false);
+    });
+
+    // Fetch global settings
+    const unsubSettings = onSnapshot(doc(db, 'settings', 'global'), (docSnap) => {
+      if (docSnap.exists()) {
+        setAdminSettings(docSnap.data() as AppSetting);
+      } else {
+        const defaultAdminSettings: AppSetting = {
+          maintenanceMode: false,
+          defaultRPM: 60,
+          allowedProviders: ['Google Gemini', 'Mistral AI', 'Groq Cloud', 'OpenAI'],
+          siteName: 'SEO Metadata Generator',
+          siteDescription: 'Professional SEO metadata generator for stock contributors.',
+          logoUrl: '',
+          faviconUrl: '',
+          primaryColor: '#3b82f6',
+          secondaryColor: '#1e293b',
+          accentColor: '#8b5cf6',
+          footerText: '© 2024 SEO Metadata Generator. All rights reserved.',
+          heroTitle: 'Generate High-Quality SEO Metadata',
+          heroSubtitle: 'Boost your visibility on stock platforms with AI-powered titles, descriptions, and keywords.',
+          heroTitleColor: '#ffffff',
+          heroSubtitleColor: 'rgba(255, 255, 255, 0.4)',
+          settingsTitle: 'GIG SEO SETTINGS',
+          tutorialText: 'Tutorial',
+          tutorialUrl: 'https://youtube.com/@tanbhirislamjihad',
+          facebookUrl: 'https://facebook.com/tanbhirislamjihad.bd?mibextid=ZbWKwL',
+          youtubeUrl: 'https://youtube.com/@tanbhirislamjihad'
+        };
+        setAdminSettings(defaultAdminSettings);
+      }
+    }, (err) => {
+      console.error('Failed to fetch global settings:', err);
+    });
+
+    return () => {
+      unsubscribe();
+      unsubSettings();
+    };
+  }, []);
+
+  const [logoClicks, setLogoClicks] = useState(0);
+
+  const handleLogoClick = () => {
+    if (!isAdmin) return;
+    const newClicks = logoClicks + 1;
+    setLogoClicks(newClicks);
+    if (newClicks >= 5) {
+      window.location.href = '/admin.html';
+      setLogoClicks(0);
+    }
+    // Reset clicks after 2 seconds of inactivity
+    setTimeout(() => setLogoClicks(0), 2000);
+  };
+
+  // Sync local theme with admin settings if not already customized
+  useEffect(() => {
+    if (adminSettings?.primaryColor && settings.themeColor === '#3b82f6') {
+      setSettings(prev => ({ ...prev, themeColor: adminSettings.primaryColor }));
+    }
+  }, [adminSettings?.primaryColor]);
+
+  // Update document title and favicon
+  useEffect(() => {
+    if (adminSettings?.siteName) {
+      document.title = adminSettings.siteName;
+    }
+    if (adminSettings?.faviconUrl) {
+      let link: HTMLLinkElement | null = document.querySelector("link[rel~='icon']");
+      if (!link) {
+        link = document.createElement('link');
+        link.rel = 'icon';
+        document.getElementsByTagName('head')[0].appendChild(link);
+      }
+      link.href = adminSettings.faviconUrl;
+    }
+  }, [adminSettings?.siteName, adminSettings?.faviconUrl]);
+
+  const activeThemeColor = settings.themeColor;
+  const activeSecondaryColor = adminSettings?.secondaryColor || '#1e293b';
+  const activeAccentColor = adminSettings?.accentColor || '#8b5cf6';
 
   const currentProviderKeys = savedKeys.filter(k => k.provider === activeProvider);
   const currentActiveKey = currentProviderKeys.length > 0 ? currentProviderKeys[0].key : undefined;
@@ -366,6 +540,11 @@ export default function App() {
       // Try keys until success
       let success = false;
       let keyIdx = 0;
+      const existingTitles = filesRef.current
+        .filter(f => f.status === 'completed' && f.id !== id)
+        .map(f => f.title)
+        .slice(-10);
+
       while (!success && keyIdx < providerKeys.length) {
         const activeKey = providerKeys[keyIdx].key;
         setFiles(prev => prev.map(f => f.id === id ? { ...f, currentKey: activeKey } : f));
@@ -385,7 +564,8 @@ export default function App() {
               model: modelId,
               fileName: currentFile.fileName,
               platform: activePlatform,
-              provider: activeProvider
+              provider: activeProvider,
+              avoidTitles: existingTitles
             }
           );
 
@@ -508,6 +688,17 @@ export default function App() {
       return;
     }
 
+    if (!user) {
+      addNotification('Please login with Google to start generating metadata.', 'error');
+      loginWithGoogle();
+      return;
+    }
+
+    if (adminSettings?.maintenanceMode && !isAdmin) {
+      addNotification('The application is currently undergoing maintenance. Please try again later.', 'error');
+      return;
+    }
+
     const providerKeys = savedKeys.filter(k => k.provider === activeProvider);
     if (providerKeys.length === 0) {
       setIsSettingsOpen(true);
@@ -535,6 +726,7 @@ export default function App() {
 
     // Track exhausted keys for this session
     const exhaustedKeys = new Set<string>();
+    const generatedTitlesInBatch = new Set<string>();
     const keyIndexRef = { current: 0 };
 
     // Process in batches
@@ -589,11 +781,16 @@ export default function App() {
                 model: modelId,
                 fileName: currentFile.fileName,
                 platform: activePlatform,
-                provider: activeProvider
+                provider: activeProvider,
+                avoidTitles: Array.from(generatedTitlesInBatch).slice(-10)
               }
             );
 
             if (!generatingRef.current) return;
+
+            if (result.title) {
+              generatedTitlesInBatch.add(result.title);
+            }
 
             setFiles(prev => prev.map(f => f.id === currentFile.id ? { ...f, ...result, status: 'completed' } : f));
             success = true;
@@ -641,11 +838,27 @@ export default function App() {
       i += currentBatchSize;
       setActiveKeyInUse(null);
 
+      // Log usage to Firestore
+      if (user) {
+        try {
+          await setDoc(doc(collection(db, 'usage_logs')), {
+            userId: user.uid,
+            platform: activePlatform,
+            timestamp: serverTimestamp(),
+            fileCount: batch.length
+          });
+        } catch (e) {
+          console.error('Failed to log usage:', e);
+        }
+      }
+
       // RPM Throttling: Wait if there are more batches
       if (generatingRef.current && i < pendingFiles.length) {
-        const delay = settingsRef.current.isRpmEnabled 
-          ? (60 / settingsRef.current.rpm) * 1000 
-          : 50; // Very small delay if RPM is disabled for "Quick Generate"
+        const effectiveRPM = settingsRef.current.isRpmEnabled 
+          ? Math.min(settingsRef.current.rpm, adminSettings?.defaultRPM || 60)
+          : (adminSettings?.defaultRPM || 60);
+        
+        const delay = (60 / effectiveRPM) * 1000;
         await new Promise(resolve => setTimeout(resolve, delay));
       }
     }
@@ -697,35 +910,40 @@ export default function App() {
     const data = files
       .filter(f => f.status === 'completed')
       .map(f => {
-        if (activePlatform === 'Freepik') {
+        if (activePlatform === 'Fiverr') {
           return {
-            'File name': f.fileName,
-            'Title': f.title,
+            'Service Title': f.title,
+            'Gig Description': f.description,
+            'Search Tags': f.keywords.join(', ')
+          };
+        }
+        if (activePlatform === 'Upwork') {
+          return {
+            'Job Title': f.title,
+            'Profile Overview': f.description,
+            'Skills': f.keywords.join(', ')
+          };
+        }
+        if (activePlatform === 'Getty Images' || activePlatform === 'iStock') {
+          return {
+            'Filename': f.fileName,
+            'Description': f.description || f.title,
             'Keywords': f.keywords.join(', ')
           };
         }
-        if (activePlatform === 'Adobe Stock') {
+        if (activePlatform === 'Vecteezy') {
           return {
             'Filename': f.fileName,
             'Title': f.title,
-            'Keywords': f.keywords.join(', '),
-            'Category': f.category || '' 
-          };
-        }
-        if (activePlatform === 'Shutterstock') {
-          return {
-            'Filename': f.fileName,
             'Description': f.description,
-            'Keywords': f.keywords.join(', '),
-            'Categories': '' // Shutterstock often requires categories
+            'Keywords': f.keywords.join(', ')
           };
         }
-        // Default for Adobe Stock, General, Getty, etc.
+        // Default for LinkedIn, Etsy, etc.
         return {
-          'Filename': f.fileName,
           'Title': f.title,
           'Description': f.description,
-          'Keywords': f.keywords.join(', ')
+          'Keywords/Tags': f.keywords.join(', ')
         };
       });
 
@@ -769,14 +987,18 @@ export default function App() {
   const deleteHistoryItem = (id: string) => {
     setHistory(prev => prev.filter(item => item.id !== id));
   };
-
   const [testStatus, setTestStatus] = useState<'idle' | 'testing' | 'success' | 'error'>('idle');
   const [testError, setTestError] = useState<string | null>(null);
 
-  const testKey = async (keyToTest?: string): Promise<boolean> => {
+  const testKey = async (keyToTest?: string, keyId?: string): Promise<boolean> => {
     const key = typeof keyToTest === 'string' ? keyToTest : newKey.trim();
     if (!key) return false;
-    setTestStatus('testing');
+    
+    if (keyId) {
+      setSavedKeys(prev => prev.map(k => k.id === keyId ? { ...k, status: 'testing' } : k));
+    } else {
+      setTestStatus('testing');
+    }
     setTestError(null);
     
     try {
@@ -816,18 +1038,28 @@ export default function App() {
           model: modelId,
           fileName: "test_image.jpg",
           platform: activePlatform,
-          provider: activeProvider
+          provider: activeProvider,
+          avoidTitles: []
         }
       );
       
       if (result && (result.title || result.description)) {
-        setTestStatus('success');
-        setTimeout(() => setTestStatus('idle'), 2000);
+        if (keyId) {
+          setSavedKeys(prev => prev.map(k => k.id === keyId ? { ...k, status: 'valid' } : k));
+        } else {
+          setTestStatus('success');
+          setTimeout(() => setTestStatus('idle'), 2000);
+        }
         return true;
       }
       
-      setTestError("API returned an empty or invalid response. Please check your key permissions.");
-      setTestStatus('error');
+      const errorMsg = "API returned an empty or invalid response. Please check your key permissions.";
+      if (keyId) {
+        setSavedKeys(prev => prev.map(k => k.id === keyId ? { ...k, status: 'invalid' } : k));
+      } else {
+        setTestError(errorMsg);
+        setTestStatus('error');
+      }
       return false;
     } catch (error: any) {
       console.error(`Test failed for ${activeProvider}:`, error);
@@ -842,13 +1074,16 @@ export default function App() {
         errorMsg = "Network error: Could not reach the AI provider. This might be a temporary issue or a CORS restriction.";
       }
       
-      setTestError(errorMsg);
-      setTestStatus('error');
-      
-      // Keep error visible longer for user to read
-      setTimeout(() => {
-        setTestStatus('idle');
-      }, 8000);
+      if (keyId) {
+        setSavedKeys(prev => prev.map(k => k.id === keyId ? { ...k, status: 'invalid' } : k));
+      } else {
+        setTestError(errorMsg);
+        setTestStatus('error');
+        // Keep error visible longer for user to read
+        setTimeout(() => {
+          setTestStatus('idle');
+        }, 8000);
+      }
       return false;
     }
   };
@@ -862,45 +1097,36 @@ export default function App() {
     
     if (keysToProcess.length === 0) return;
     
-    let successCount = 0;
-    let failCount = 0;
-    
-    setTestStatus('testing');
-    addNotification(`Testing ${keysToProcess.length} keys for ${activeProvider}...`, 'info');
-
-    let currentSavedKeys = [...savedKeys];
+    const newKeys: SavedKey[] = [];
+    const existingKeys = savedKeys.filter(k => k.provider === activeProvider).map(k => k.key);
     
     for (const key of keysToProcess) {
-      // Check if key already exists for this provider
-      if (currentSavedKeys.some(k => k.key === key && k.provider === activeProvider)) {
-        continue;
-      }
-
-      const isValid = await testKey(key);
-      if (isValid) {
-        currentSavedKeys = [...currentSavedKeys, { 
-          id: Math.random().toString(36).substr(2, 9) + Date.now().toString(), 
-          key: key, 
+      if (!existingKeys.includes(key)) {
+        newKeys.push({
+          id: Math.random().toString(36).substr(2, 9) + Date.now().toString(),
+          key: key,
           visible: false,
-          provider: activeProvider
-        }];
-        successCount++;
-      } else {
-        failCount++;
+          provider: activeProvider,
+          status: 'testing'
+        });
       }
     }
 
-    setSavedKeys(currentSavedKeys);
-    setNewKey('');
-    setTestStatus('idle');
+    if (newKeys.length === 0) {
+      setNewKey('');
+      return;
+    }
 
-    if (successCount > 0) {
-      addNotification(`Successfully saved ${successCount} ${activeProvider} keys.`, 'success');
-    }
-    if (failCount > 0) {
-      addNotification(`${failCount} keys failed validation and were not saved.`, 'error');
-    }
+    setSavedKeys(prev => [...prev, ...newKeys]);
+    setNewKey('');
+    addNotification(`Saving ${newKeys.length} keys...`, 'info');
+
+    // Test in background
+    newKeys.forEach(async (k) => {
+      await testKey(k.key, k.id);
+    });
   };
+
 
   const removeKey = (id: string) => {
     setSavedKeys(savedKeys.filter(k => k.id !== id));
@@ -916,32 +1142,172 @@ export default function App() {
   };
 
   return (
-    <div className="min-h-screen bg-[#121212] text-white font-sans" style={{ '--theme-color': settings.themeColor } as React.CSSProperties}>
-      {/* Header */}
-      <header className="h-16 border-b border-white/10 flex items-center justify-between px-8 bg-[#1a1a1a] sticky top-0 z-50">
-        <div className="flex items-center gap-2">
-          <div 
-            className="w-10 h-10 rounded-lg flex items-center justify-center font-bold text-xl italic tracking-tighter shadow-lg"
-            style={{ backgroundColor: settings.themeColor, boxShadow: `0 10px 15px -3px ${settings.themeColor}33` }}
-          >
-            CSV
-          </div>
-          <span className="text-sm font-semibold tracking-widest uppercase opacity-70">Generate Csv Pro</span>
-        </div>
-        <button 
-          className="flex items-center gap-2 px-4 py-2 rounded-full transition-all border group"
+    <Routes>
+      <Route path="/admin.html" element={<AdminPage isAdmin={isAdmin} user={user} />} />
+      <Route path="/login.html" element={<LoginPage />} />
+      <Route path="/user.html" element={
+        <div 
+          className={cn(
+            "min-h-screen font-sans transition-colors duration-300 bg-bg-main text-text-main", 
+            settings.themeMode === 'light' ? 'light' : ''
+          )} 
           style={{ 
-            backgroundColor: `${settings.themeColor}1a`, 
-            color: settings.themeColor,
-            borderColor: `${settings.themeColor}33`
-          }}
+            '--theme-color': activeThemeColor,
+            '--secondary-color': activeSecondaryColor,
+            '--accent-color': activeAccentColor
+          } as React.CSSProperties}
         >
-          <Play className="w-4 h-4 fill-current group-hover:scale-110 transition-transform" />
-          <span className="text-sm font-medium">Tutorial</span>
-        </button>
+      {/* Header */}
+      <header className="h-16 border-b border-border-main flex items-center justify-between px-8 bg-bg-card sticky top-0 z-50">
+        <div 
+          className="flex items-center gap-2 cursor-pointer select-none"
+          onClick={handleLogoClick}
+        >
+          {adminSettings?.logoUrl ? (
+            <img 
+              src={adminSettings.logoUrl} 
+              alt="Logo" 
+              className="w-10 h-10 rounded-xl object-contain shadow-lg"
+              referrerPolicy="no-referrer"
+            />
+          ) : (
+            <motion.div 
+              whileHover={{ scale: 1.05 }}
+              whileTap={{ scale: 0.95 }}
+              className="w-10 h-10 rounded-xl flex items-center justify-center shadow-2xl relative overflow-hidden group"
+              style={{ 
+                background: `linear-gradient(135deg, ${activeThemeColor}, ${activeSecondaryColor})`,
+              }}
+            >
+              <div className="absolute inset-0 bg-white/10 opacity-0 group-hover:opacity-100 transition-opacity" />
+              <motion.div
+                animate={{ 
+                  rotate: [0, 10, -10, 0],
+                  scale: [1, 1.1, 1]
+                }}
+                transition={{ 
+                  duration: 4, 
+                  repeat: Infinity,
+                  ease: "easeInOut"
+                }}
+              >
+                <Sparkles className="w-6 h-6 text-white drop-shadow-[0_2px_4px_rgba(0,0,0,0.3)]" />
+              </motion.div>
+              <div className="absolute -bottom-1 -right-1 w-4 h-4 bg-white/20 blur-sm rounded-full" />
+            </motion.div>
+          )}
+          <div className="flex flex-col">
+            <span className="text-xl font-black tracking-tighter leading-none bg-clip-text text-transparent" 
+              style={{ 
+                backgroundImage: `linear-gradient(to right, ${activeThemeColor}, ${activeAccentColor})`,
+                WebkitBackgroundClip: 'text'
+              }}
+            >
+              {adminSettings?.siteName || 'SEO GIG'}
+            </span>
+            <div className="flex items-center gap-1 mt-1">
+              <div className="h-[1px] w-3 bg-current opacity-20" />
+              <span className="text-[9px] uppercase tracking-[0.3em] font-black opacity-40 leading-none">
+                Optimizer
+              </span>
+            </div>
+          </div>
+        </div>
+        <div className="flex items-center gap-4">
+          <a 
+            href={adminSettings?.tutorialUrl || "https://youtube.com/@tanbhirislamjihad"}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex items-center gap-2 px-4 py-2 rounded-full transition-all border group"
+            style={{ 
+              backgroundColor: `${activeThemeColor}1a`, 
+              color: activeThemeColor,
+              borderColor: `${activeThemeColor}33`
+            }}
+          >
+            <Play className="w-4 h-4 fill-current group-hover:scale-110 transition-transform" />
+            <span className="text-sm font-medium">{adminSettings?.tutorialText || 'Tutorial'}</span>
+          </a>
+
+          <button
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              const newMode = settings.themeMode === 'dark' ? 'light' : 'dark';
+              setSettings(prev => ({ ...prev, themeMode: newMode }));
+              localStorage.setItem('generation_settings', JSON.stringify({ ...settings, themeMode: newMode }));
+            }}
+            className="p-2 rounded-full transition-all border group relative z-[60]"
+            style={{ 
+              backgroundColor: `${activeThemeColor}1a`, 
+              color: activeThemeColor,
+              borderColor: `${activeThemeColor}33`
+            }}
+            title={settings.themeMode === 'dark' ? 'Switch to White Mode' : 'Switch to Night Mode'}
+          >
+            {settings.themeMode === 'dark' ? (
+              <Moon className="w-4 h-4 group-hover:rotate-12 transition-transform" />
+            ) : (
+              <Sun className="w-4 h-4 group-hover:rotate-90 transition-transform" />
+            )}
+          </button>
+
+          {user ? (
+            <div className="flex items-center gap-3 pl-4 border-l border-border-main">
+              <div className="flex flex-col items-end">
+                <span className="text-xs font-bold text-text-main leading-none">{user.displayName}</span>
+                <span className="text-[10px] text-text-dim uppercase tracking-wider">{isAdmin ? 'Admin' : 'User'}</span>
+              </div>
+              <img 
+                src={user.photoURL || ''} 
+                alt="Profile" 
+                className="w-8 h-8 rounded-full border border-border-main"
+                referrerPolicy="no-referrer"
+              />
+              <button 
+                onClick={async () => {
+                  await logout();
+                  window.location.href = '/login.html';
+                }}
+                className="p-2 hover:bg-red-500/10 rounded-full text-text-dim hover:text-red-500 transition-all"
+                title="Logout"
+              >
+                <LogOut className="w-4 h-4" />
+              </button>
+            </div>
+          ) : (
+            <a 
+              href="/login.html"
+              className="flex items-center gap-2 px-4 py-2 rounded-full bg-white text-black font-black text-xs hover:bg-white/90 transition-all shadow-xl"
+            >
+              <LogIn className="w-4 h-4" />
+              Login with Google
+            </a>
+          )}
+        </div>
       </header>
 
-      {/* Notifications */}
+      {/* Hero Section */}
+      <section className="px-8 pt-12 pb-4 text-center max-w-5xl mx-auto">
+        <motion.h1 
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="text-4xl md:text-6xl font-black mb-6 tracking-tight"
+          style={{ color: settings.themeMode === 'light' ? '#0f172a' : (adminSettings?.heroTitleColor || '#ffffff') }}
+        >
+          {adminSettings?.heroTitle || 'Generate High-Quality SEO Metadata'}
+        </motion.h1>
+        <motion.p 
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.1 }}
+          className="text-lg md:text-xl max-w-3xl mx-auto leading-relaxed"
+          style={{ color: settings.themeMode === 'light' ? '#475569' : (adminSettings?.heroSubtitleColor || 'rgba(255, 255, 255, 0.4)') }}
+        >
+          {adminSettings?.heroSubtitle || 'Boost your visibility on stock platforms with AI-powered titles, descriptions, and keywords.'}
+        </motion.p>
+      </section>
+
       <div className="fixed top-6 right-6 z-[100] space-y-3 pointer-events-none">
         <AnimatePresence>
           {notifications.map((n) => (
@@ -954,7 +1320,7 @@ export default function App() {
                 "pointer-events-auto px-6 py-4 rounded-2xl shadow-2xl border flex items-center gap-4 min-w-[300px]",
                 n.type === 'error' ? "bg-red-500/10 border-red-500/20 text-red-500" :
                 n.type === 'success' ? "bg-green-500/10 border-green-500/20 text-green-500" :
-                "bg-white/10 border-white/10 text-white"
+                "bg-bg-hover border-border-main text-text-main"
               )}
             >
               {n.type === 'error' && <AlertCircle className="w-5 h-5" />}
@@ -969,36 +1335,42 @@ export default function App() {
       <main className="p-8 grid grid-cols-1 lg:grid-cols-[350px_1fr] gap-8 max-w-[1600px] mx-auto">
         {/* Sidebar Controls */}
         <aside className="space-y-6">
-          <div className="bg-[#1a1a1a] rounded-2xl p-6 border border-white/5 shadow-xl">
+          <div className="bg-bg-card rounded-2xl p-6 border border-border-main shadow-xl">
             <div className="flex items-center justify-between mb-6">
               <h2 className="text-xl font-bold uppercase tracking-tight">
-                AI & API SETTINGS
+                {adminSettings?.settingsTitle || 'GIG SEO SETTINGS'}
               </h2>
               <button 
                 onClick={() => setIsSettingsOpen(true)}
                 className="w-10 h-10 rounded-full flex items-center justify-center transition-all shadow-lg"
-                style={{ backgroundColor: settings.themeColor }}
+                style={{ backgroundColor: activeThemeColor }}
               >
-                <Settings className="w-5 h-5 text-white" />
+                <Settings className="w-5 h-5 text-text-main" />
               </button>
             </div>
 
             {/* Active AI Status */}
-            <div className="mb-6 bg-green-500/10 border border-green-500/20 rounded-full px-4 py-2 flex items-center gap-2">
-              <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
-              <span className="text-[10px] font-bold uppercase tracking-wider text-green-500/80">
-                ACTIVE AI: <span className="text-white">Google Gemini</span> • <span className="text-white/60">{selectedModel}</span>
-              </span>
+            <div className="mb-6 bg-green-500/10 border border-green-500/20 rounded-full px-4 py-2 flex items-center justify-between gap-2">
+              <div className="flex items-center gap-2">
+                <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
+                <span className="text-[10px] font-bold uppercase tracking-wider text-green-500/80">
+                  ACTIVE AI: <span className="text-text-main">{activeProvider}</span>
+                </span>
+              </div>
+              <div className="flex items-center gap-1.5 px-2 py-0.5 bg-blue-500/10 rounded-full border border-blue-500/20">
+                <CheckCircle2 className="w-3 h-3 text-blue-500" />
+                <span className="text-[9px] font-bold text-blue-500 uppercase">Safeguard Active</span>
+              </div>
             </div>
 
             <div className="space-y-8">
               {/* Batch Size */}
               <div className="space-y-4">
                 <div className="flex justify-between items-center text-sm">
-                  <span className="text-white font-medium flex items-center gap-1.5">
-                    Batch Size (Concurrent) <HelpCircle className="w-3.5 h-3.5 text-white/30" />
+                  <span className="text-text-main font-medium flex items-center gap-1.5">
+                    Batch Size (Concurrent) <HelpCircle className="w-3.5 h-3.5 text-text-dim" />
                   </span>
-                  <span className="bg-white/5 px-2 py-1 rounded text-xs font-mono text-white/60">{settings.batchSize}x</span>
+                  <span className="bg-bg-input px-2 py-1 rounded text-xs font-mono text-text-muted">{settings.batchSize}x</span>
                 </div>
                 <input 
                   type="range" 
@@ -1006,15 +1378,15 @@ export default function App() {
                   value={settings.batchSize}
                   onChange={(e) => setSettings({...settings, batchSize: parseInt(e.target.value)})}
                   className="w-full h-1.5 bg-white/10 rounded-lg appearance-none cursor-pointer"
-                  style={{ accentColor: settings.themeColor }}
+                  style={{ accentColor: activeThemeColor }}
                 />
               </div>
 
               {/* RPM */}
               <div className="space-y-4">
                 <div className="flex justify-between items-center text-sm">
-                  <span className="text-white font-medium flex items-center gap-1.5">
-                    Requests Per Minute (RPM) <HelpCircle className="w-3.5 h-3.5 text-white/30" />
+                  <span className="text-text-main font-medium flex items-center gap-1.5">
+                    Requests Per Minute (RPM) <HelpCircle className="w-3.5 h-3.5 text-text-dim" />
                   </span>
                   <div className="flex items-center gap-3">
                     <button 
@@ -1029,7 +1401,7 @@ export default function App() {
                         settings.isRpmEnabled ? "right-1" : "left-1"
                       )} />
                     </button>
-                    <span className="bg-white/5 px-2 py-1 rounded text-xs font-mono text-white/60">{settings.rpm} / min</span>
+                    <span className="bg-bg-input px-2 py-1 rounded text-xs font-mono text-text-muted">{settings.rpm} / min</span>
                   </div>
                 </div>
                 <input 
@@ -1042,7 +1414,7 @@ export default function App() {
                     "w-full h-1.5 rounded-lg appearance-none cursor-pointer transition-opacity",
                     settings.isRpmEnabled ? "bg-white/10" : "bg-white/5 opacity-30"
                   )}
-                  style={{ accentColor: settings.isRpmEnabled ? settings.themeColor : '#444' }}
+                  style={{ accentColor: settings.isRpmEnabled ? activeThemeColor : '#444' }}
                 />
               </div>
 
@@ -1054,7 +1426,7 @@ export default function App() {
                   onClick={() => setSidebarTab('metadata')}
                   className={cn(
                     "text-sm font-bold pb-2 transition-all relative",
-                    sidebarTab === 'metadata' ? "text-white" : "text-white/30 hover:text-white/50"
+                    sidebarTab === 'metadata' ? "text-text-main" : "text-text-dim hover:text-text-muted"
                   )}
                 >
                   Metadata
@@ -1062,7 +1434,7 @@ export default function App() {
                     <motion.div 
                       layoutId="sidebar-tab"
                       className="absolute -bottom-0.5 left-0 right-0 h-0.5"
-                      style={{ backgroundColor: settings.themeColor }}
+                      style={{ backgroundColor: activeThemeColor }}
                     />
                   )}
                 </button>
@@ -1070,7 +1442,7 @@ export default function App() {
                   onClick={() => setSidebarTab('prompt')}
                   className={cn(
                     "text-sm font-bold pb-2 transition-all relative",
-                    sidebarTab === 'prompt' ? "text-white" : "text-white/30 hover:text-white/50"
+                    sidebarTab === 'prompt' ? "text-text-main" : "text-text-dim hover:text-text-muted"
                   )}
                 >
                   Prompt
@@ -1078,7 +1450,7 @@ export default function App() {
                     <motion.div 
                       layoutId="sidebar-tab"
                       className="absolute -bottom-0.5 left-0 right-0 h-0.5"
-                      style={{ backgroundColor: settings.themeColor }}
+                      style={{ backgroundColor: activeThemeColor }}
                     />
                   )}
                 </button>
@@ -1091,42 +1463,42 @@ export default function App() {
                     {/* Auto Download Toggles */}
                     <div className="space-y-4">
                       <div className="flex justify-between items-center">
-                        <span className="text-xs text-white/60 flex items-center gap-1.5">
+                        <span className="text-xs text-text-muted flex items-center gap-1.5">
                           Auto Download CSV <HelpCircle className="w-3 h-3 opacity-30" />
                         </span>
                         <button 
                           onClick={() => setSettings({...settings, autoDownload: !settings.autoDownload})}
                           className={cn(
                             "w-10 h-5 rounded-full transition-all relative",
-                            settings.autoDownload ? "bg-white/20" : "bg-white/10"
+                            settings.autoDownload ? "bg-bg-hover" : "bg-bg-input"
                           )}
                         >
                           <div className={cn(
-                            "absolute top-1 w-3 h-3 rounded-full transition-all bg-white",
+                            "absolute top-1 w-3 h-3 rounded-full transition-all bg-text-main",
                             settings.autoDownload ? "right-1" : "left-1"
                           )} />
                         </button>
                       </div>
                       <div className="flex justify-between items-center">
-                        <span className="text-xs text-white/60 flex items-center gap-1.5">
+                        <span className="text-xs text-text-muted flex items-center gap-1.5">
                           Auto Download Embedded Zip <HelpCircle className="w-3 h-3 opacity-30" />
                         </span>
                         <button 
                           onClick={() => setSettings({...settings, autoDownloadZip: !settings.autoDownloadZip})}
                           className={cn(
                             "w-10 h-5 rounded-full transition-all relative",
-                            settings.autoDownloadZip ? "bg-white/20" : "bg-white/10"
+                            settings.autoDownloadZip ? "bg-bg-hover" : "bg-bg-input"
                           )}
                         >
                           <div className={cn(
-                            "absolute top-1 w-3 h-3 rounded-full transition-all bg-white",
+                            "absolute top-1 w-3 h-3 rounded-full transition-all bg-text-main",
                             settings.autoDownloadZip ? "right-1" : "left-1"
                           )} />
                         </button>
                       </div>
                     </div>
 
-                    <div className="h-px bg-white/5" />
+                    <div className="h-px bg-bg-input" />
 
                     {[
                       { label: 'Title Length', key: 'titleLength', max: 200, unitKey: 'titleLengthUnit' },
@@ -1135,20 +1507,20 @@ export default function App() {
                     ].map((slider) => (
                       <div key={slider.key} className="space-y-4">
                         <div className="flex justify-between items-center text-sm">
-                          <span className="text-white font-medium">{slider.label}</span>
+                          <span className="text-text-main font-medium">{slider.label}</span>
                           <div className="flex items-center gap-2">
-                            <span className="text-xs font-bold text-white">{settings[slider.key as keyof GenerationSettings]}</span>
+                            <span className="text-xs font-bold text-text-main">{settings[slider.key as keyof GenerationSettings]}</span>
                             {slider.unitKey && (
                               <select 
                                 value={settings[slider.unitKey as keyof GenerationSettings] as string}
                                 onChange={(e) => setSettings({...settings, [slider.unitKey!]: e.target.value})}
-                                className="bg-white/5 border border-white/10 rounded px-1 py-0.5 text-[10px] font-bold focus:outline-none"
+                                className="bg-bg-input border border-border-main rounded px-1 py-0.5 text-[10px] font-bold focus:outline-none"
                               >
                                 <option value="Words">Words</option>
                                 <option value="Chars">Chars</option>
                               </select>
                             )}
-                            {!slider.unitKey && <span className="text-[10px] font-bold text-white/40 uppercase">Keywords</span>}
+                            {!slider.unitKey && <span className="text-[10px] font-bold text-text-muted uppercase">Keywords</span>}
                           </div>
                         </div>
                         <input 
@@ -1156,8 +1528,8 @@ export default function App() {
                           min="1" max={slider.max} 
                           value={settings[slider.key as keyof GenerationSettings] as number}
                           onChange={(e) => setSettings({...settings, [slider.key]: parseInt(e.target.value)})}
-                          className="w-full h-1.5 bg-white/10 rounded-lg appearance-none cursor-pointer"
-                          style={{ accentColor: settings.themeColor }}
+                          className="w-full h-1.5 bg-bg-input rounded-lg appearance-none cursor-pointer"
+                          style={{ accentColor: activeThemeColor }}
                         />
                       </div>
                     ))}
@@ -1167,7 +1539,7 @@ export default function App() {
                       <button 
                         onClick={() => setIsPromptModalOpen(true)}
                         className="text-xs font-bold transition-colors"
-                        style={{ color: settings.themeColor }}
+                        style={{ color: activeThemeColor }}
                       >
                         Expand
                       </button>
@@ -1177,7 +1549,7 @@ export default function App() {
                       <span className="text-sm font-medium">Custom Prompt</span>
                       <div className="relative">
                         <select 
-                          className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm focus:outline-none appearance-none cursor-pointer"
+                          className="w-full bg-bg-input border border-border-main rounded-xl px-4 py-3 text-sm focus:outline-none appearance-none cursor-pointer"
                           value={settings.customPrompt}
                           onChange={(e) => setSettings({...settings, customPrompt: e.target.value})}
                         >
@@ -1196,7 +1568,7 @@ export default function App() {
                       <span className="text-sm font-medium">Change File extension</span>
                       <input 
                         type="text"
-                        className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm focus:outline-none placeholder:text-white/20"
+                        className="w-full bg-bg-input border border-border-main rounded-xl px-4 py-3 text-sm focus:outline-none placeholder:text-text-dim"
                         placeholder="Default"
                         value={settings.changeFileExtension}
                         onChange={(e) => setSettings({...settings, changeFileExtension: e.target.value})}
@@ -1206,19 +1578,19 @@ export default function App() {
                 ) : (
                   <div className="space-y-3">
                     <div className="flex justify-between text-sm">
-                      <span className="text-white font-medium">Custom Prompt</span>
+                      <span className="text-text-main font-medium">Custom Prompt</span>
                       <button 
                         onClick={() => setIsPromptModalOpen(true)}
                         className="text-xs font-bold uppercase tracking-wider hover:underline"
-                        style={{ color: settings.themeColor }}
+                        style={{ color: activeThemeColor }}
                       >
                         Expand
                       </button>
                     </div>
                     <div className="relative">
                       <textarea 
-                        className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm focus:outline-none transition-colors h-48 resize-none"
-                        style={{ borderColor: settings.themeColor + '33' }}
+                        className="w-full bg-bg-input border border-border-main rounded-xl px-4 py-3 text-sm focus:outline-none transition-colors h-48 resize-none"
+                        style={{ borderColor: activeThemeColor + '33' }}
                         placeholder="Add custom instructions for the AI..."
                         value={settings.customPrompt}
                         onChange={(e) => setSettings({...settings, customPrompt: e.target.value})}
@@ -1233,10 +1605,10 @@ export default function App() {
                 <span className="text-sm font-medium">Theme Color :</span>
                 <div className="flex items-center gap-2">
                   <div 
-                    className="w-10 h-10 rounded-full border-2 border-white/20 shadow-lg cursor-pointer"
+                    className="w-10 h-10 rounded-full border-2 border-border-main shadow-lg cursor-pointer"
                     style={{ backgroundColor: settings.themeColor }}
                     onClick={() => {
-                      const colors = ['#f97316', '#3b82f6', '#10b981', '#ef4444', '#8b5cf6'];
+                      const colors = ['#3b82f6', '#f97316', '#10b981', '#ef4444', '#8b5cf6'];
                       const currentIndex = colors.indexOf(settings.themeColor);
                       const nextIndex = (currentIndex + 1) % colors.length;
                       setSettings({...settings, themeColor: colors[nextIndex]});
@@ -1245,6 +1617,8 @@ export default function App() {
                 </div>
               </div>
 
+              {/* Theme Mode Toggle removed from here and moved to header */}
+
               <button 
                 onClick={handleSaveSettings}
                 className={cn(
@@ -1252,8 +1626,8 @@ export default function App() {
                   showSettingsFeedback ? "bg-green-500" : ""
                 )}
                 style={{ 
-                  backgroundColor: showSettingsFeedback ? undefined : settings.themeColor,
-                  boxShadow: showSettingsFeedback ? undefined : `0 10px 15px -3px ${settings.themeColor}33`
+                  backgroundColor: showSettingsFeedback ? undefined : activeThemeColor,
+                  boxShadow: showSettingsFeedback ? undefined : `0 10px 15px -3px ${activeThemeColor}33`
                 }}
               >
                 {showSettingsFeedback ? 'Settings Saved!' : 'Save Settings'}
@@ -1265,9 +1639,9 @@ export default function App() {
         {/* Main Content Area */}
         <div className="space-y-8">
           {/* Upload Section */}
-          <section className="bg-[#1a1a1a] rounded-2xl p-8 border border-white/5 shadow-xl">
+          <section className="bg-bg-card rounded-2xl p-8 border border-border-main shadow-xl">
             <div className="flex items-center justify-between mb-8">
-              <h2 className="text-2xl font-bold">Upload Files</h2>
+              <h2 className="text-2xl font-bold">Service Descriptions</h2>
             </div>
 
             {/* Dropzone / Grid */}
@@ -1276,12 +1650,12 @@ export default function App() {
               className={cn(
                 "min-h-[300px] border-2 border-dashed rounded-2xl transition-all flex flex-wrap gap-4 p-6 cursor-pointer",
                 files.length === 0 
-                  ? "border-white/10 bg-white/[0.02]" 
-                  : "border-transparent bg-white/[0.02]"
+                  ? "border-border-main bg-bg-input" 
+                  : "border-transparent bg-bg-input"
               )}
               style={{ 
                 borderColor: files.length === 0 ? undefined : 'transparent',
-                '--hover-border-color': settings.themeColor + '4d' 
+                '--hover-border-color': activeThemeColor + '4d' 
               } as any}
             >
               <input 
@@ -1294,10 +1668,10 @@ export default function App() {
             />
               
               {files.length === 0 ? (
-                <div className="w-full flex flex-col items-center justify-center text-white/20">
+                <div className="w-full flex flex-col items-center justify-center text-text-dim">
                   <Upload className="w-12 h-12 mb-4" />
-                  <p className="text-lg font-medium">Click or drag files here to upload</p>
-                  <p className="text-sm">Supports JPG, PNG, EPS, SVG, CSV</p>
+                  <p className="text-lg font-medium">Click or drag service details here</p>
+                  <p className="text-sm">Supports Text, CSV, and Service Details</p>
                 </div>
               ) : (
                 <div className="w-full max-h-[500px] overflow-y-auto pr-2 custom-scrollbar">
@@ -1311,7 +1685,7 @@ export default function App() {
                         className="w-full h-full object-cover rounded-xl border border-white/10"
                       />
                       {file.type !== 'image' && (
-                        <div className="absolute top-2 left-2 px-1.5 py-0.5 bg-black/60 backdrop-blur-md rounded text-[8px] font-bold text-white/80 uppercase tracking-wider border border-white/10">
+                        <div className="absolute top-2 left-2 px-1.5 py-0.5 bg-black/60 backdrop-blur-md rounded text-[8px] font-bold text-text-main/80 uppercase tracking-wider border border-border-main">
                           {file.type}
                         </div>
                       )}
@@ -1321,17 +1695,17 @@ export default function App() {
                             e.stopPropagation();
                             setPreviewFile(file);
                           }}
-                          className="p-3 bg-white/10 hover:bg-white/20 rounded-full transition-all hover:scale-110"
+                          className="p-3 bg-bg-input hover:bg-bg-hover rounded-full transition-all hover:scale-110"
                           title="View Preview"
                         >
-                          <Eye className="w-6 h-6 text-white" />
+                          <Eye className="w-6 h-6 text-text-main" />
                         </button>
                         <button 
                           onClick={(e) => {
                             e.stopPropagation();
                             removeFile(file.id);
                           }}
-                          className="p-3 bg-white/10 hover:bg-white/20 rounded-full transition-all hover:scale-110"
+                          className="p-3 bg-bg-input hover:bg-bg-hover rounded-full transition-all hover:scale-110"
                           title="Remove File"
                         >
                           <Trash2 className="w-6 h-6 text-red-500" />
@@ -1340,18 +1714,18 @@ export default function App() {
                       {file.status === 'preparing' && (
                         <div 
                           className="absolute inset-0 backdrop-blur-[2px] rounded-xl flex flex-col items-center justify-center gap-2"
-                          style={{ backgroundColor: settings.themeColor + '33' }}
+                          style={{ backgroundColor: activeThemeColor + '33' }}
                         >
-                          <RefreshCw className="w-6 h-6 animate-spin" style={{ color: settings.themeColor }} />
-                          <span className="text-[10px] font-bold text-white uppercase tracking-widest">Preparing...</span>
+                          <RefreshCw className="w-6 h-6 animate-spin" style={{ color: activeThemeColor }} />
+                          <span className="text-[10px] font-bold text-text-main uppercase tracking-widest">Preparing...</span>
                         </div>
                       )}
                       {file.status === 'generating' && (
                         <div 
                           className="absolute inset-0 backdrop-blur-[2px] rounded-xl flex items-center justify-center"
-                          style={{ backgroundColor: settings.themeColor + '33' }}
+                          style={{ backgroundColor: activeThemeColor + '33' }}
                         >
-                          <RefreshCw className="w-6 h-6 animate-spin" style={{ color: settings.themeColor }} />
+                          <RefreshCw className="w-6 h-6 animate-spin" style={{ color: activeThemeColor }} />
                         </div>
                       )}
                       {file.status === 'completed' && (
@@ -1362,7 +1736,7 @@ export default function App() {
                       {file.status === 'error' && (
                         <div className="absolute top-2 right-2 group/error">
                           <AlertCircle className="w-5 h-5 text-red-500 fill-black cursor-help" />
-                          <div className="absolute bottom-full right-0 mb-2 w-48 p-2 bg-red-500 text-white text-[10px] rounded-lg opacity-0 group-hover/error:opacity-100 transition-opacity pointer-events-none z-10 shadow-xl">
+                          <div className="absolute bottom-full right-0 mb-2 w-48 p-2 bg-red-500 text-text-main text-[10px] rounded-lg opacity-0 group-hover/error:opacity-100 transition-opacity pointer-events-none z-10 shadow-xl">
                             {file.error || 'Generation failed'}
                           </div>
                         </div>
@@ -1371,10 +1745,10 @@ export default function App() {
                   ))}
                   {/* Add More Button */}
                   <div 
-                    className="aspect-square rounded-xl border-2 border-dashed border-white/10 flex flex-col items-center justify-center text-white/20 transition-all"
+                    className="aspect-square rounded-xl border-2 border-dashed border-border-main flex flex-col items-center justify-center text-text-dim transition-all"
                     style={{ 
-                      '--hover-border-color': settings.themeColor + '4d',
-                      '--hover-text-color': settings.themeColor + '80'
+                      '--hover-border-color': activeThemeColor + '4d',
+                      '--hover-text-color': activeThemeColor + '80'
                     } as any}
                   >
                     <span className="text-2xl font-bold">+{files.length}</span>
@@ -1393,15 +1767,25 @@ export default function App() {
                   className={cn(
                     "px-4 py-2 rounded-lg text-sm font-medium transition-all flex items-center gap-2",
                     activePlatform === p 
-                      ? "text-white shadow-lg" 
-                      : "text-white/40 hover:text-white/60"
+                      ? "text-text-main shadow-lg" 
+                      : "text-text-dim hover:text-text-muted"
                   )}
                   style={{ 
-                    backgroundColor: activePlatform === p ? settings.themeColor : undefined,
-                    boxShadow: activePlatform === p ? `0 10px 15px -3px ${settings.themeColor}33` : undefined
+                    backgroundColor: activePlatform === p ? activeThemeColor : undefined,
+                    boxShadow: activePlatform === p ? `0 10px 15px -3px ${activeThemeColor}33` : undefined
                   }}
                 >
-                  {p === 'Adobe Stock' && <Layers className="w-4 h-4" />}
+                  {p === 'Adobe Stock' && <ImageIcon className="w-4 h-4" />}
+                  {p === 'Shutterstock' && <Camera className="w-4 h-4" />}
+                  {p === 'Freepik' && <Zap className="w-4 h-4" />}
+                  {p === 'Vecteezy' && <Layout className="w-4 h-4" />}
+                  {p === 'Getty Images' && <Globe className="w-4 h-4" />}
+                  {p === 'iStock' && <ShieldCheck className="w-4 h-4" />}
+                  {p === 'Dreamstime' && <Cloud className="w-4 h-4" />}
+                  {p === 'Fiverr' && <Layers className="w-4 h-4" />}
+                  {p === 'Upwork' && <Briefcase className="w-4 h-4" />}
+                  {p === 'Etsy' && <ShoppingBag className="w-4 h-4" />}
+                  {p === 'General SEO' && <Search className="w-4 h-4" />}
                   {p}
                 </button>
               ))}
@@ -1430,7 +1814,7 @@ export default function App() {
                   <button 
                     onClick={() => setIsSettingsOpen(true)}
                     className="text-xs font-bold hover:underline"
-                    style={{ color: settings.themeColor }}
+                    style={{ color: activeThemeColor }}
                   >
                     Manage Keys
                   </button>
@@ -1442,12 +1826,12 @@ export default function App() {
             {generating && (
               <div className="mt-8 space-y-2">
                 <div className="flex justify-between text-sm font-medium">
-                  <span style={{ color: settings.themeColor }}>
+                  <span style={{ color: activeThemeColor }}>
                     {files.filter(f => f.status === 'completed').length === files.length 
                       ? 'Generation Complete!' 
                       : `Processing ${files.filter(f => f.status === 'generating').length} files...`}
                   </span>
-                  <span style={{ color: settings.themeColor }}>
+                  <span style={{ color: activeThemeColor }}>
                     {Math.round((files.filter(f => f.status === 'completed').length / files.length) * 100)}%
                   </span>
                 </div>
@@ -1457,8 +1841,8 @@ export default function App() {
                     animate={{ width: `${(files.filter(f => f.status === 'completed').length / files.length) * 100}%` }}
                     className="h-full"
                     style={{ 
-                      backgroundColor: settings.themeColor,
-                      boxShadow: `0 0 10px ${settings.themeColor}80`
+                      backgroundColor: activeThemeColor,
+                      boxShadow: `0 0 10px ${activeThemeColor}80`
                     }}
                   />
                 </div>
@@ -1477,9 +1861,9 @@ export default function App() {
                 onClick={startGeneration}
                 className="flex-1 min-w-[140px] font-bold py-4 rounded-xl flex items-center justify-center gap-2 transition-all border"
                 style={{ 
-                  backgroundColor: `${settings.themeColor}1a`, 
-                  color: settings.themeColor,
-                  borderColor: `${settings.themeColor}33`
+                  backgroundColor: `${activeThemeColor}1a`, 
+                  color: activeThemeColor,
+                  borderColor: `${activeThemeColor}33`
                 }}
               >
                 {generating ? <Pause className="w-5 h-5" /> : <Play className="w-5 h-5" />} {generating ? 'Pause' : 'Resume'}
@@ -1487,10 +1871,10 @@ export default function App() {
               <button 
                 onClick={startGeneration}
                 disabled={files.length === 0}
-                className="flex-1 min-w-[140px] text-white font-bold py-4 rounded-xl flex items-center justify-center gap-2 shadow-lg disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+                className="flex-1 min-w-[140px] text-text-main font-bold py-4 rounded-xl flex items-center justify-center gap-2 shadow-lg disabled:opacity-50 disabled:cursor-not-allowed transition-all"
                 style={{ 
-                  backgroundColor: settings.themeColor,
-                  boxShadow: `0 10px 15px -3px ${settings.themeColor}33`
+                  backgroundColor: activeThemeColor,
+                  boxShadow: `0 10px 15px -3px ${activeThemeColor}33`
                 }}
               >
                 <RefreshCw className={cn("w-5 h-5", generating && "animate-spin")} /> 
@@ -1512,9 +1896,9 @@ export default function App() {
           </section>
 
           {/* Results Section */}
-          <section className="bg-[#1a1a1a] rounded-2xl border border-white/5 shadow-xl overflow-hidden">
+          <section className="bg-bg-card rounded-2xl border border-border-main shadow-xl overflow-hidden">
             <div className="p-8 border-b border-white/5 flex items-center justify-between">
-              <h2 className="text-2xl font-bold">Metadata Queue ({files.length})</h2>
+              <h2 className="text-2xl font-bold">Gig Optimization Queue ({files.length})</h2>
             </div>
 
             <div className="divide-y divide-white/5">
@@ -1523,7 +1907,7 @@ export default function App() {
                   "p-8 flex gap-8 group hover:bg-white/[0.02] transition-colors relative",
                   file.status === 'generating' && "bg-opacity-[0.02]"
                 )}
-                style={{ backgroundColor: file.status === 'generating' ? settings.themeColor + '05' : undefined }}
+                style={{ backgroundColor: file.status === 'generating' ? activeThemeColor + '05' : undefined }}
                 >
                   <div className="w-48 space-y-4">
                     <div className="relative aspect-video">
@@ -1535,13 +1919,13 @@ export default function App() {
                       />
                       {file.status === 'preparing' && (
                         <div className="absolute inset-0 bg-black/40 backdrop-blur-[1px] rounded-xl flex flex-col items-center justify-center gap-2">
-                          <RefreshCw className="w-8 h-8 animate-spin" style={{ color: settings.themeColor }} />
-                          <span className="text-xs font-bold text-white uppercase tracking-widest">Preparing...</span>
+                          <RefreshCw className="w-8 h-8 animate-spin" style={{ color: activeThemeColor }} />
+                          <span className="text-xs font-bold text-text-main uppercase tracking-widest">Preparing...</span>
                         </div>
                       )}
                       {file.status === 'generating' && (
                         <div className="absolute inset-0 bg-black/40 backdrop-blur-[1px] rounded-xl flex items-center justify-center">
-                          <RefreshCw className="w-8 h-8 animate-spin" style={{ color: settings.themeColor }} />
+                          <RefreshCw className="w-8 h-8 animate-spin" style={{ color: activeThemeColor }} />
                         </div>
                       )}
                       {file.status === 'error' && (
@@ -1576,28 +1960,20 @@ export default function App() {
                         {file.status === 'completed' && (
                           <button 
                             onClick={() => {
-                              const parts = [file.title];
-                              if (activePlatform !== 'Adobe Stock') {
-                                parts.push(file.description);
-                              }
-                              parts.push(file.keywords.join(', '));
-                              if (activePlatform === 'Adobe Stock' && file.category) {
-                                parts.push(file.category);
-                              }
+                              const parts = [file.title, file.description, file.keywords.join(', ')];
                               copyToClipboard(parts.join('\n\n'));
                             }}
-                            className="p-2 hover:bg-white/10 rounded-lg transition-colors text-white/40 hover:text-white"
+                            className="p-2 hover:bg-bg-hover rounded-lg transition-colors text-text-dim hover:text-text-main"
                           >
                             <Copy className="w-4 h-4" />
                           </button>
                         )}
                       </div>
                       {file.status === 'completed' && (
-                        <div className="flex items-center gap-4 text-xs font-bold text-white/30 uppercase tracking-widest">
+                        <div className="flex items-center gap-4 text-xs font-bold text-text-dim uppercase tracking-widest">
                           <span>Title: {file.title.length} chars</span>
-                          {activePlatform !== 'Adobe Stock' && <span>Desc: {file.description.length} chars</span>}
+                          <span>Desc: {file.description.length} chars</span>
                           <span>Keywords: {file.keywords.length}</span>
-                          {activePlatform === 'Adobe Stock' && file.category && <span>Category: {file.category}</span>}
                         </div>
                       )}
                     </div>
@@ -1605,26 +1981,18 @@ export default function App() {
                     {file.status === 'completed' ? (
                       <div className="space-y-4">
                         <div className="space-y-1">
-                          <span className="text-xs font-bold text-white/20 uppercase tracking-widest">Title</span>
-                          <p className="text-white/80 leading-relaxed">{file.title}</p>
+                          <span className="text-xs font-bold text-text-dim uppercase tracking-widest">Title</span>
+                          <p className="text-text-main/80 leading-relaxed">{file.title}</p>
                         </div>
-                        {activePlatform !== 'Adobe Stock' && (
-                          <div className="space-y-1">
-                            <span className="text-xs font-bold text-white/20 uppercase tracking-widest">Description</span>
-                            <p className="text-white/60 leading-relaxed">{file.description}</p>
-                          </div>
-                        )}
-                        {activePlatform === 'Adobe Stock' && file.category && (
-                          <div className="space-y-1">
-                            <span className="text-xs font-bold text-white/20 uppercase tracking-widest">Category</span>
-                            <p className="text-white/60 leading-relaxed">{file.category}</p>
-                          </div>
-                        )}
                         <div className="space-y-1">
-                          <span className="text-xs font-bold text-white/20 uppercase tracking-widest">Keywords</span>
+                          <span className="text-xs font-bold text-text-dim uppercase tracking-widest">Description</span>
+                          <p className="text-text-muted leading-relaxed">{file.description}</p>
+                        </div>
+                        <div className="space-y-2">
+                          <span className="text-xs font-bold text-text-dim uppercase tracking-widest">Keywords</span>
                           <div className="flex flex-wrap gap-2">
                             {file.keywords.map((kw, i) => (
-                              <span key={i} className="text-sm text-white/40 hover:text-white/60 cursor-default">
+                              <span key={i} className="text-sm text-text-dim hover:text-text-muted cursor-default">
                                 {kw}{i < file.keywords.length - 1 ? ',' : ''}
                               </span>
                             ))}
@@ -1669,9 +2037,9 @@ export default function App() {
               initial={{ scale: 0.9, opacity: 0 }}
               animate={{ scale: 1, opacity: 1 }}
               exit={{ scale: 0.9, opacity: 0 }}
-              className="relative w-full max-w-2xl bg-[#1a1a1a] rounded-3xl border border-white/10 shadow-2xl overflow-hidden"
+              className="relative w-full max-w-2xl bg-bg-card rounded-3xl border border-border-main shadow-2xl overflow-hidden"
             >
-              <div className="p-8 border-b border-white/5 flex items-center justify-between">
+              <div className="p-8 border-b border-border-main flex items-center justify-between">
                 <h3 className="text-xl font-bold">Custom AI Prompt</h3>
                 <button 
                   onClick={() => setIsPromptModalOpen(false)}
@@ -1686,12 +2054,12 @@ export default function App() {
                   For example: "Focus on the vintage aesthetic" or "Include specific technical terms for 3D rendering".
                 </p>
                 <textarea 
-                  className="w-full bg-white/5 border border-white/10 rounded-2xl p-6 text-lg focus:outline-none transition-colors h-64 resize-none"
+                  className="w-full bg-bg-input border border-border-main rounded-2xl p-6 text-lg focus:outline-none transition-colors h-64 resize-none"
                   style={{ borderColor: 'var(--focus-border-color)' } as any}
                   placeholder="Type your custom instructions here..."
                   value={settings.customPrompt}
                   onChange={(e) => setSettings({...settings, customPrompt: e.target.value})}
-                  onFocus={(e) => e.currentTarget.style.borderColor = settings.themeColor + '80'}
+                  onFocus={(e) => e.currentTarget.style.borderColor = activeThemeColor + '80'}
                   onBlur={(e) => e.currentTarget.style.borderColor = 'rgba(255,255,255,0.1)'}
                 />
                 <div className="flex justify-end gap-4">
@@ -1705,8 +2073,8 @@ export default function App() {
                     onClick={() => setIsPromptModalOpen(false)}
                     className="text-white px-8 py-3 rounded-xl font-bold shadow-lg transition-all"
                     style={{ 
-                      backgroundColor: settings.themeColor,
-                      boxShadow: `0 10px 15px -3px ${settings.themeColor}33`
+                      backgroundColor: activeThemeColor,
+                      boxShadow: `0 10px 15px -3px ${activeThemeColor}33`
                     }}
                   >
                     Save Prompt
@@ -1733,9 +2101,9 @@ export default function App() {
               initial={{ opacity: 0, scale: 0.95, y: 20 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.95, y: 20 }}
-              className="relative w-full max-w-2xl bg-[#1a1a1a] rounded-3xl border border-white/10 shadow-2xl overflow-hidden"
+              className="relative w-full max-w-2xl bg-bg-card rounded-3xl border border-border-main shadow-2xl overflow-hidden"
             >
-              <div className="p-6 border-b border-white/5 flex items-center justify-between">
+              <div className="p-6 border-b border-border-main flex items-center justify-between">
                 <div className="flex items-center gap-3">
                   <div className="w-10 h-10 rounded-xl bg-blue-500/10 flex items-center justify-center">
                     <History className="w-5 h-5 text-blue-500" />
@@ -1756,15 +2124,15 @@ export default function App() {
               <div className="p-6 max-h-[60vh] overflow-y-auto space-y-4">
                 {history.length === 0 ? (
                   <div className="text-center py-12">
-                    <History className="w-12 h-12 text-white/5 mx-auto mb-4" />
-                    <p className="text-white/40">No history found</p>
-                    <p className="text-xs text-white/20">Generations will appear here after you export them</p>
+                    <History className="w-12 h-12 text-text-dim/20 mx-auto mb-4" />
+                    <p className="text-text-dim">No history found</p>
+                    <p className="text-xs text-text-dim/50">Generations will appear here after you export them</p>
                   </div>
                 ) : (
                   history.map((item) => (
                     <div 
                       key={item.id}
-                      className="bg-white/5 border border-white/5 rounded-2xl p-4 flex items-center justify-between group hover:border-white/10 transition-all"
+                      className="bg-bg-input border border-border-main rounded-2xl p-4 flex items-center justify-between group hover:border-border-main transition-all"
                     >
                       <div className="flex items-center gap-4">
                         <div className="w-12 h-12 rounded-xl bg-white/5 flex items-center justify-center font-bold text-white/20">
@@ -1824,7 +2192,7 @@ export default function App() {
               initial={{ scale: 0.9, opacity: 0 }}
               animate={{ scale: 1, opacity: 1 }}
               exit={{ scale: 0.9, opacity: 0 }}
-              className="relative w-full max-w-md bg-[#1e1e1e] rounded-2xl border border-white/10 shadow-2xl overflow-hidden"
+              className="relative w-full max-w-md bg-bg-card rounded-2xl border border-border-main shadow-2xl overflow-hidden"
             >
               <div className="p-6 border-b border-white/5 flex items-center justify-between">
                 <h3 className="text-xl font-bold">Manage AI Settings</h3>
@@ -1839,23 +2207,25 @@ export default function App() {
               <div className="p-6 space-y-6">
                 {/* Provider Tabs */}
                 <div className="flex p-1 bg-white/5 rounded-xl overflow-x-auto custom-scrollbar">
-                  {(['Google Gemini', 'Mistral AI', 'Groq Cloud', 'OpenAI'] as AIProvider[]).map((provider) => (
-                    <button
-                      key={provider}
-                      onClick={() => {
-                        setActiveProvider(provider);
-                        setSelectedModel(PROVIDER_MODELS[provider][0]);
-                      }}
-                      className={cn(
-                        "flex-1 py-2 px-4 text-xs font-medium rounded-lg transition-all whitespace-nowrap",
-                        activeProvider === provider 
-                          ? "bg-white/10 text-white shadow-lg" 
-                          : "text-white/30 hover:text-white/50"
-                      )}
-                    >
-                      {provider}
-                    </button>
-                  ))}
+                  {(['Google Gemini', 'Mistral AI', 'Groq Cloud', 'OpenAI'] as AIProvider[])
+                    .filter(p => isAdmin || !adminSettings || adminSettings.allowedProviders.includes(p))
+                    .map((provider) => (
+                      <button
+                        key={provider}
+                        onClick={() => {
+                          setActiveProvider(provider);
+                          setSelectedModel(PROVIDER_MODELS[provider][0]);
+                        }}
+                        className={cn(
+                          "flex-1 py-2 px-4 text-xs font-medium rounded-lg transition-all whitespace-nowrap",
+                          activeProvider === provider 
+                            ? "bg-white/10 text-white shadow-lg" 
+                            : "text-white/30 hover:text-white/50"
+                        )}
+                      >
+                        {provider}
+                      </button>
+                    ))}
                 </div>
 
                 {/* Model Selection */}
@@ -1864,8 +2234,8 @@ export default function App() {
                   <select 
                     value={selectedModel}
                     onChange={(e) => setSelectedModel(e.target.value)}
-                    className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm focus:outline-none transition-colors appearance-none"
-                    onFocus={(e) => e.currentTarget.style.borderColor = settings.themeColor + '80'}
+                    className="w-full bg-bg-input border border-border-main rounded-xl px-4 py-3 text-sm focus:outline-none transition-colors appearance-none"
+                    onFocus={(e) => e.currentTarget.style.borderColor = activeThemeColor + '80'}
                     onBlur={(e) => e.currentTarget.style.borderColor = 'rgba(255,255,255,0.1)'}
                   >
                     {PROVIDER_MODELS[activeProvider].map(model => (
@@ -1879,22 +2249,39 @@ export default function App() {
                   <label className="text-sm font-bold text-white/60">Saved {activeProvider} API Keys</label>
                   <div className="space-y-2 max-h-40 overflow-y-auto pr-2 custom-scrollbar">
                     {savedKeys.filter(k => k.provider === activeProvider).map((k) => (
-                      <div key={k.id} className="flex items-center gap-2 bg-white/5 border border-white/10 rounded-xl px-4 py-3 group">
+                      <div key={k.id} className="flex items-center gap-2 bg-bg-input border border-border-main rounded-xl px-4 py-3 group">
                         <span className="flex-1 font-mono text-sm text-white/60 truncate">
                           {k.visible ? k.key : maskKey(k.key)}
                         </span>
-                        <button 
-                          onClick={() => toggleKeyVisibility(k.id)}
-                          className="p-1.5 hover:bg-white/10 rounded-lg transition-colors text-white/30 hover:text-white"
-                        >
-                          {k.visible ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                        </button>
-                        <button 
-                          onClick={() => removeKey(k.id)}
-                          className="p-1.5 hover:bg-white/10 rounded-lg transition-colors text-red-500/50 hover:text-red-500"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
+                        <div className="flex items-center gap-1 shrink-0">
+                          {k.status === 'valid' && (
+                            <div className="p-1.5 text-green-500" title="Valid Key">
+                              <CheckCircle2 className="w-4 h-4" />
+                            </div>
+                          )}
+                          {k.status === 'invalid' && (
+                            <div className="p-1.5 text-red-500" title="Invalid Key">
+                              <AlertCircle className="w-4 h-4" />
+                            </div>
+                          )}
+                          {k.status === 'testing' && (
+                            <div className="p-1.5 text-blue-500 animate-spin" title="Testing Key...">
+                              <RefreshCw className="w-4 h-4" />
+                            </div>
+                          )}
+                          <button 
+                            onClick={() => toggleKeyVisibility(k.id)}
+                            className="p-1.5 hover:bg-white/10 rounded-lg transition-colors text-white/30 hover:text-white"
+                          >
+                            {k.visible ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                          </button>
+                          <button 
+                            onClick={() => removeKey(k.id)}
+                            className="p-1.5 hover:bg-white/10 rounded-lg transition-colors text-red-500/50 hover:text-red-500"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </div>
                       </div>
                     ))}
                     {savedKeys.filter(k => k.provider === activeProvider).length === 0 && (
@@ -1915,8 +2302,8 @@ export default function App() {
                       value={newKey}
                       onChange={(e) => setNewKey(e.target.value)}
                       rows={3}
-                      className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm focus:outline-none transition-colors custom-scrollbar resize-none"
-                      onFocus={(e) => e.currentTarget.style.borderColor = settings.themeColor + '80'}
+                      className="w-full bg-bg-input border border-border-main rounded-xl px-4 py-3 text-sm focus:outline-none transition-colors custom-scrollbar resize-none"
+                      onFocus={(e) => e.currentTarget.style.borderColor = activeThemeColor + '80'}
                       onBlur={(e) => e.currentTarget.style.borderColor = 'rgba(255,255,255,0.1)'}
                     />
                     <div className="flex gap-2">
@@ -1924,27 +2311,40 @@ export default function App() {
                         onClick={() => testKey()}
                         disabled={testStatus === 'testing'}
                         className={cn(
-                          "flex-1 py-2 rounded-xl text-sm font-bold transition-all",
+                          "flex-1 py-2 rounded-xl text-sm font-bold transition-all flex items-center justify-center gap-2",
                           testStatus === 'testing' ? "bg-white/10 text-white/30" :
                           testStatus === 'success' ? "bg-green-500 text-white" :
                           testStatus === 'error' ? "bg-red-500 text-white" :
                           "bg-[#3c4454] hover:bg-[#4c5464] text-white/80"
                         )}
                       >
-                        {testStatus === 'testing' ? 'Testing...' : 
-                         testStatus === 'success' ? 'Valid!' : 
-                         testStatus === 'error' ? 'Invalid' : 'Test First Key'}
+                        {testStatus === 'testing' ? (
+                          <>
+                            <RefreshCw className="w-4 h-4 animate-spin" />
+                            Testing...
+                          </>
+                        ) : testStatus === 'success' ? (
+                          <>
+                            <CheckCircle2 className="w-4 h-4" />
+                            Valid!
+                          </>
+                        ) : testStatus === 'error' ? (
+                          <>
+                            <AlertCircle className="w-4 h-4" />
+                            Invalid
+                          </>
+                        ) : 'Test First Key'}
                       </button>
                       <button 
                         onClick={saveKey}
-                        disabled={testStatus === 'testing'}
-                        className="flex-1 py-2 text-white rounded-xl text-sm font-bold transition-all shadow-lg disabled:opacity-50"
+                        className="flex-1 py-2 text-white rounded-xl text-sm font-bold transition-all shadow-lg flex items-center justify-center gap-2"
                         style={{ 
-                          backgroundColor: settings.themeColor,
-                          boxShadow: `0 10px 15px -3px ${settings.themeColor}33`
+                          backgroundColor: activeThemeColor,
+                          boxShadow: `0 10px 15px -3px ${activeThemeColor}33`
                         }}
                       >
-                        {testStatus === 'testing' ? 'Testing & Saving...' : 'Save All Keys'}
+                        <Download className="w-4 h-4" />
+                        Save All Keys
                       </button>
                     </div>
                   </div>
@@ -2027,7 +2427,7 @@ export default function App() {
               initial={{ scale: 0.9, opacity: 0, y: 20 }}
               animate={{ scale: 1, opacity: 1, y: 0 }}
               exit={{ scale: 0.9, opacity: 0, y: 20 }}
-              className="relative w-full max-w-md bg-[#1e1e1e] rounded-[32px] border border-white/10 shadow-2xl overflow-hidden p-8 text-center"
+              className="relative w-full max-w-md bg-bg-card rounded-[32px] border border-border-main shadow-2xl overflow-hidden p-8 text-center"
             >
               <button 
                 onClick={() => setIsCompletionModalOpen(false)}
@@ -2125,7 +2525,7 @@ export default function App() {
                 </button>
               </div>
               
-              <div className="bg-[#1a1a1a] p-2 rounded-2xl border border-white/10 shadow-2xl overflow-hidden">
+              <div className="bg-bg-card p-2 rounded-2xl border border-border-main shadow-2xl overflow-hidden">
                 <img 
                   src={previewFile.thumbnail} 
                   alt={previewFile.fileName}
@@ -2168,13 +2568,33 @@ export default function App() {
       </AnimatePresence>
 
       {/* Footer / Status Bar */}
-      <footer className="h-10 border-t border-white/5 bg-[#1a1a1a] flex items-center px-8 text-[10px] font-bold text-white/20 uppercase tracking-[0.2em]">
-        <div className="flex items-center gap-6">
-          <span>Status: Ready</span>
-          <span>API: {savedKeys.length > 0 ? 'Connected' : 'Not Configured'}</span>
-          <span>Version: 2.4.0-Stable</span>
+      <footer className="h-12 border-t border-border-main bg-bg-card flex items-center justify-between px-8 text-[11px] font-medium text-text-muted tracking-wide">
+        <div className="flex-1" />
+        <div className="flex-1 text-center">
+          {adminSettings?.footerText || '© 2026 Tanbhir Islam Jihad. All rights reserved.'}
+        </div>
+        <div className="flex-1 flex justify-end gap-6 uppercase tracking-widest font-bold text-[10px]">
+          <a 
+            href={adminSettings?.facebookUrl || "https://facebook.com/tanbhirislamjihad.bd?mibextid=ZbWKwL"} 
+            target="_blank" 
+            rel="noopener noreferrer"
+            className="hover:text-white transition-colors"
+          >
+            Facebook
+          </a>
+          <a 
+            href={adminSettings?.youtubeUrl || "https://youtube.com/@tanbhirislamjihad"} 
+            target="_blank" 
+            rel="noopener noreferrer"
+            className="hover:text-white transition-colors"
+          >
+            YouTube
+          </a>
         </div>
       </footer>
     </div>
+  } />
+  <Route path="/" element={<Navigate to="/user.html" replace />} />
+</Routes>
   );
 }

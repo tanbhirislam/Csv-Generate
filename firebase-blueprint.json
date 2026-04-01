@@ -1,0 +1,54 @@
+{
+  "entities": {
+    "User": {
+      "title": "User Profile",
+      "description": "Stores user information and roles.",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string", "description": "Unique ID from Firebase Auth" },
+        "email": { "type": "string", "format": "email", "description": "User's email address" },
+        "displayName": { "type": "string", "description": "User's display name" },
+        "photoURL": { "type": "string", "format": "uri", "description": "User's profile photo URL" },
+        "role": { "type": "string", "enum": ["admin", "user"], "description": "User's role in the system" },
+        "createdAt": { "type": "string", "format": "date-time", "description": "When the user first logged in" },
+        "lastLogin": { "type": "string", "format": "date-time", "description": "When the user last logged in" }
+      },
+      "required": ["uid", "email", "role"]
+    },
+    "AppSetting": {
+      "title": "Application Setting",
+      "description": "Global settings for the application controlled by admins.",
+      "type": "object",
+      "properties": {
+        "maintenanceMode": { "type": "boolean", "description": "Whether the app is in maintenance mode" },
+        "defaultRPM": { "type": "number", "description": "Default rate limit for users" },
+        "allowedProviders": { "type": "array", "items": { "type": "string" }, "description": "List of enabled AI providers" }
+      }
+    },
+    "UsageLog": {
+      "title": "Usage Log",
+      "description": "Tracks metadata generation requests.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string", "description": "ID of the user who made the request" },
+        "platform": { "type": "string", "description": "Target platform for metadata" },
+        "timestamp": { "type": "string", "format": "date-time", "description": "When the request occurred" },
+        "fileCount": { "type": "number", "description": "Number of files processed" }
+      }
+    }
+  },
+  "firestore": {
+    "/users/{uid}": {
+      "schema": "User",
+      "description": "Individual user profiles."
+    },
+    "/settings/global": {
+      "schema": "AppSetting",
+      "description": "Global application configuration."
+    },
+    "/usage_logs/{logId}": {
+      "schema": "UsageLog",
+      "description": "Audit trail of user activity."
+    }
+  }
+}

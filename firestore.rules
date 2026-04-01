@@ -1,0 +1,58 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // ===============================================================
+    // Helper Functions
+    // ===============================================================
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+    
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+    
+    function isAdmin() {
+      return isAuthenticated() && 
+        request.auth.token.email == "businessonline.6251@gmail.com" &&
+        request.auth.token.email_verified == true;
+    }
+
+    function isValidUser(data) {
+      return data.keys().hasAll(['uid', 'email', 'role']) &&
+             data.uid is string &&
+             data.email is string &&
+             data.role in ['admin', 'user'];
+    }
+
+    // ===============================================================
+    // Rules
+    // ===============================================================
+    
+    // User profiles
+    match /users/{uid} {
+      allow read: if isAuthenticated() && (isOwner(uid) || isAdmin());
+      allow create: if isAuthenticated() && isOwner(uid) && isValidUser(request.resource.data) && (
+        request.resource.data.role == 'user' || 
+        (request.resource.data.role == 'admin' && request.auth.token.email == "businessonline.6251@gmail.com")
+      );
+      allow update: if isAuthenticated() && (
+        (isOwner(uid) && request.resource.data.role == resource.data.role) || 
+        isAdmin()
+      );
+    }
+    
+    // Global settings
+    match /settings/global {
+      allow read: if true; // Publicly readable for app config
+      allow write: if isAdmin();
+    }
+    
+    // Usage logs
+    match /usage_logs/{logId} {
+      allow read: if isAdmin();
+      allow create: if isAuthenticated() && request.resource.data.userId == request.auth.uid;
+      allow update, delete: if isAdmin();
+    }
+  }
+}

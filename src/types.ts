@@ -5,6 +5,7 @@ export interface SavedKey {
   key: string;
   visible: boolean;
   provider: AIProvider;
+  status?: 'valid' | 'invalid' | 'testing';
 }
 
 export interface HistoryItem {
@@ -39,9 +40,10 @@ export interface GenerationSettings {
   keywordsCount: number;
   customPrompt: string;
   themeColor: string;
+  themeMode: 'light' | 'dark';
   autoDownload: boolean;
   autoDownloadZip: boolean;
   changeFileExtension: string;
 }
 
-export type Platform = 'General' | 'Adobe Stock' | 'Shutterstock' | 'Freepik' | 'Getty Images' | 'iStock' | 'Dreamstime' | 'Vecteezy';
+export type Platform = 'Adobe Stock' | 'Shutterstock' | 'Freepik' | 'Vecteezy' | 'Creative Market' | 'Getty Images' | 'iStock' | 'Dreamstime' | 'Fiverr' | 'Upwork' | 'Etsy' | 'General SEO';
