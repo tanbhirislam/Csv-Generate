@@ -125,7 +125,7 @@ export async function generateMetadata(
     1. Title: ${titleConstraint}. ${isStock ? 'Focus on descriptive, keyword-rich titles.' : 'Use patterns like "I will [Action] [Service] for [Benefit]".'}
     2. Description: ${descriptionConstraint}. ${isStock ? 'Describe the scene accurately.' : 'Focus on benefits, not just features.'}
     3. Keywords/Tags: Provide EXACTLY ${settings.keywordsCount} relevant, high-traffic tags.
-    4. Category: ${settings.platform === 'Adobe Stock' ? 'Provide the most relevant Adobe Stock category NUMBER (1-21). 1:Animals, 2:Buildings, 3:Business, 4:Drinks, 5:Environment, 6:States of Mind, 7:Food, 8:Graphic Resources, 9:Hobbies, 10:Industry, 11:Landscapes, 12:Lifestyle, 13:People, 14:Plants, 15:Culture, 16:Science, 17:Social Issues, 18:Sports, 19:Technology, 20:Transport, 21:Travel.' : 'Not required.'}
+    4. Category: ${settings.platform === 'Adobe Stock' ? 'CRITICAL: Analyze the content deeply and provide the most relevant Adobe Stock category NUMBER (1-21). You MUST return ONLY the number. Categories: 1:Animals, 2:Buildings and Architecture, 3:Business, 4:Drinks, 5:The Environment, 6:States of Mind, 7:Food, 8:Graphic Resources, 9:Hobbies and Leisure, 10:Industry, 11:Landscapes, 12:Lifestyle, 13:People, 14:Plants and Flowers, 15:Culture and Religion, 16:Science, 17:Social Issues, 18:Sports, 19:Technology, 20:Transport, 21:Travel.' : 'Not required.'}
     5. Style: ${settings.customPrompt || "Professional, persuasive, and search-optimized."}
     
     ANTI-ROBOTIC RULES:
@@ -273,6 +273,14 @@ function processResult(result: any, settings: any) {
   // Keywords processing
   if (result.keywords && result.keywords.length > settings.keywordsCount) {
     result.keywords = result.keywords.slice(0, settings.keywordsCount);
+  }
+  
+  // Category processing
+  if (settings.platform === 'Adobe Stock' && !result.category) {
+    result.category = '1'; // Default to Animals if missing
+  }
+  if (result.category) {
+    result.category = result.category.toString().trim();
   }
   
   return result;

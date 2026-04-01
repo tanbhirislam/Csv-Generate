@@ -84,7 +84,7 @@ const PROVIDER_MODELS: Record<AIProvider, string[]> = {
 export default function App() {
   const [files, setFiles] = useState<FileWithMetadata[]>([]);
   const [generating, setGenerating] = useState(false);
-  const [activePlatform, setActivePlatform] = useState<Platform>('Fiverr');
+  const [activePlatform, setActivePlatform] = useState<Platform>('Adobe Stock');
   const [settings, setSettings] = useState<GenerationSettings>(() => {
     const saved = localStorage.getItem('generation_settings');
     const defaultSettings: GenerationSettings = {
@@ -2000,8 +2000,11 @@ export default function App() {
                       {file.status === 'completed' && (
                         <div className="flex items-center gap-4 text-xs font-bold text-text-dim uppercase tracking-widest">
                           <span>Title: {file.title.length} chars</span>
-                          <span>Desc: {file.description.length} chars</span>
+                          {activePlatform !== 'Adobe Stock' && <span>Desc: {file.description.length} chars</span>}
                           <span>Keywords: {file.keywords.length}</span>
+                          {activePlatform === 'Adobe Stock' && file.category && (
+                            <span className="text-blue-400">Category: {file.category}</span>
+                          )}
                         </div>
                       )}
                     </div>
@@ -2012,10 +2015,12 @@ export default function App() {
                           <span className="text-xs font-bold text-text-dim uppercase tracking-widest">Title</span>
                           <p className="text-text-main/80 leading-relaxed">{file.title}</p>
                         </div>
-                        <div className="space-y-1">
-                          <span className="text-xs font-bold text-text-dim uppercase tracking-widest">Description</span>
-                          <p className="text-text-muted leading-relaxed">{file.description}</p>
-                        </div>
+                        {activePlatform !== 'Adobe Stock' && (
+                          <div className="space-y-1">
+                            <span className="text-xs font-bold text-text-dim uppercase tracking-widest">Description</span>
+                            <p className="text-text-muted leading-relaxed">{file.description}</p>
+                          </div>
+                        )}
                         <div className="space-y-2">
                           <span className="text-xs font-bold text-text-dim uppercase tracking-widest">Keywords</span>
                           <div className="flex flex-wrap gap-2">
