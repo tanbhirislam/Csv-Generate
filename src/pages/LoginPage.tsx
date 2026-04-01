@@ -11,8 +11,13 @@ export default function LoginPage() {
     setLoading(true);
     setError(null);
     try {
-      await loginWithGoogle();
-      window.location.href = '/user.html';
+      const result = await loginWithGoogle();
+      const user = result.user;
+      if (user.email === 'businessonline.6251@gmail.com') {
+        window.location.href = '/admin.html';
+      } else {
+        window.location.href = '/user.html';
+      }
     } catch (err: any) {
       console.error('Login error:', err);
       if (err.code === 'auth/unauthorized-domain') {

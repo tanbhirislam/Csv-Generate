@@ -216,7 +216,7 @@ export default function App() {
         }
         
         setUserProfile(profile);
-        setIsAdmin(profile.role === 'admin' && profile.email === 'businessonline.6251@gmail.com' && firebaseUser.emailVerified);
+        setIsAdmin(profile.role === 'admin' && profile.email === 'businessonline.6251@gmail.com');
       } else {
         setUserProfile(null);
         setIsAdmin(false);
