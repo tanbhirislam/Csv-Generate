@@ -125,14 +125,15 @@ export async function generateMetadata(
     1. Title: ${titleConstraint}. ${isStock ? 'Focus on descriptive, keyword-rich titles.' : 'Use patterns like "I will [Action] [Service] for [Benefit]".'}
     2. Description: ${descriptionConstraint}. ${isStock ? 'Describe the scene accurately.' : 'Focus on benefits, not just features.'}
     3. Keywords/Tags: Provide EXACTLY ${settings.keywordsCount} relevant, high-traffic tags.
-    4. Style: ${settings.customPrompt || "Professional, persuasive, and search-optimized."}
+    4. Category: ${settings.platform === 'Adobe Stock' ? 'Provide the most relevant Adobe Stock category NUMBER (1-21). 1:Animals, 2:Buildings, 3:Business, 4:Drinks, 5:Environment, 6:States of Mind, 7:Food, 8:Graphic Resources, 9:Hobbies, 10:Industry, 11:Landscapes, 12:Lifestyle, 13:People, 14:Plants, 15:Culture, 16:Science, 17:Social Issues, 18:Sports, 19:Technology, 20:Transport, 21:Travel.' : 'Not required.'}
+    5. Style: ${settings.customPrompt || "Professional, persuasive, and search-optimized."}
     
     ANTI-ROBOTIC RULES:
     - NO generic phrases like "I am a professional...", "I will provide high quality...", "Expert in...".
     - NO "fluff" words. Every word must serve a search or conversion purpose.
     - Use specific industry terminology that buyers use.
     
-    Return the result in JSON format with keys: "title", "description", "keywords".
+    Return the result in JSON format with keys: "title", "description", "keywords"${settings.platform === 'Adobe Stock' ? ', "category"' : ''}.
   `;
 
   const userPrompt = `
@@ -166,9 +167,10 @@ export async function generateMetadata(
                 keywords: {
                   type: Type.ARRAY,
                   items: { type: Type.STRING }
-                }
+                },
+                ...(settings.platform === 'Adobe Stock' ? { category: { type: Type.STRING } } : {})
               },
-              required: ["title", "description", "keywords"]
+              required: ["title", "description", "keywords", ...(settings.platform === 'Adobe Stock' ? ["category"] : [])]
             }
           }
         });

@@ -924,6 +924,21 @@ export default function App() {
             'Skills': f.keywords.join(', ')
           };
         }
+        if (activePlatform === 'Adobe Stock') {
+          return {
+            'Filename': f.fileName,
+            'Title': f.title,
+            'Keywords': f.keywords.join(', '),
+            'Category': f.category || '1'
+          };
+        }
+        if (activePlatform === 'Shutterstock' || activePlatform === 'Freepik' || activePlatform === 'Dreamstime') {
+          return {
+            'Filename': f.fileName,
+            'Description': f.description,
+            'Keywords': f.keywords.join(', ')
+          };
+        }
         if (activePlatform === 'Getty Images' || activePlatform === 'iStock') {
           return {
             'Filename': f.fileName,
