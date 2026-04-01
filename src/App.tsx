@@ -216,7 +216,7 @@ export default function App() {
         }
         
         setUserProfile(profile);
-        setIsAdmin(firebaseUser.email === 'businessonline.6251@gmail.com');
+        setIsAdmin(firebaseUser.email?.toLowerCase() === 'businessonline.6251@gmail.com');
       } else {
         setUserProfile(null);
         setIsAdmin(false);
@@ -1145,7 +1145,8 @@ export default function App() {
     <Routes>
       <Route path="/admin.html" element={<AdminPage isAdmin={isAdmin} user={user} isLoadingAuth={isLoadingAuth} />} />
       <Route path="/login.html" element={<LoginPage />} />
-      <Route path="/user.html" element={
+      <Route path="/user.html" element={<Navigate to="/" replace />} />
+      <Route path="/" element={
         <div 
           className={cn(
             "min-h-screen font-sans transition-colors duration-300 bg-bg-main text-text-main", 
@@ -2606,7 +2607,7 @@ export default function App() {
       </footer>
     </div>
   } />
-  <Route path="/" element={<Navigate to="/user.html" replace />} />
+  <Route path="*" element={<Navigate to="/" replace />} />
 </Routes>
   );
 }

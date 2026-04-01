@@ -39,14 +39,18 @@ export default function AdminPage({ isAdmin, user, isLoadingAuth }: AdminPagePro
   useEffect(() => {
     // Only redirect if auth loading is finished and user is not an admin
     if (!isLoadingAuth) {
-      if (user?.email !== 'businessonline.6251@gmail.com') {
-        window.location.href = '/user.html';
+      const isAdminEmail = user?.email?.toLowerCase() === 'businessonline.6251@gmail.com';
+      if (user && !isAdminEmail) {
+        window.location.href = '/';
+      } else if (!user) {
+        window.location.href = '/login.html';
       }
     }
   }, [user, isLoadingAuth]);
 
   const fetchAdminData = async () => {
-    if (!isAdmin || isLoadingAuth) return;
+    const isAdminEmail = user?.email?.toLowerCase() === 'businessonline.6251@gmail.com';
+    if (!isAdminEmail || isLoadingAuth) return;
     
     try {
       setIsLoading(true);
@@ -124,15 +128,17 @@ export default function AdminPage({ isAdmin, user, isLoadingAuth }: AdminPagePro
   };
 
   useEffect(() => {
-    if (isAdmin) {
-      fetchAdminData();
-    } else {
-      window.location.href = '/user.html';
+    if (!isLoadingAuth) {
+      const isAdminEmail = user?.email?.toLowerCase() === 'businessonline.6251@gmail.com';
+      if (isAdminEmail) {
+        fetchAdminData();
+      }
     }
-  }, [isAdmin]);
+  }, [isLoadingAuth, user]);
 
   const updateAdminSettings = async (newSettings: Partial<AppSetting>) => {
-    if (!isAdmin) return;
+    const isAdminEmail = user?.email?.toLowerCase() === 'businessonline.6251@gmail.com';
+    if (!isAdminEmail) return;
     try {
       const currentSettings = adminSettings || {
         maintenanceMode: false,
@@ -166,7 +172,8 @@ export default function AdminPage({ isAdmin, user, isLoadingAuth }: AdminPagePro
   };
 
   const handleSaveBranding = async () => {
-    if (!isAdmin) return;
+    const isAdminEmail = user?.email?.toLowerCase() === 'businessonline.6251@gmail.com';
+    if (!isAdminEmail) return;
     try {
       setIsSavingBranding(true);
       const success = await updateAdminSettings(brandingSettings);
@@ -181,7 +188,8 @@ export default function AdminPage({ isAdmin, user, isLoadingAuth }: AdminPagePro
   };
 
   const handleSaveSystem = async () => {
-    if (!isAdmin) return;
+    const isAdminEmail = user?.email?.toLowerCase() === 'businessonline.6251@gmail.com';
+    if (!isAdminEmail) return;
     try {
       setIsSavingSystem(true);
       const success = await updateAdminSettings(systemSettings);
@@ -195,7 +203,8 @@ export default function AdminPage({ isAdmin, user, isLoadingAuth }: AdminPagePro
     }
   };
 
-  if (!isAdmin) return null;
+  const isAdminEmail = user?.email?.toLowerCase() === 'businessonline.6251@gmail.com';
+  if (!isAdminEmail) return null;
 
   return (
     <div className="min-h-screen bg-bg-main text-text-main font-sans p-8">
