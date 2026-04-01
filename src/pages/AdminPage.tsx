@@ -22,9 +22,10 @@ import { cn } from '../lib/utils';
 interface AdminPageProps {
   isAdmin: boolean;
   user: any;
+  isLoadingAuth: boolean;
 }
 
-export default function AdminPage({ isAdmin, user }: AdminPageProps) {
+export default function AdminPage({ isAdmin, user, isLoadingAuth }: AdminPageProps) {
   const navigate = useNavigate();
   const [adminUsers, setAdminUsers] = useState<UserProfile[]>([]);
   const [adminLogs, setAdminLogs] = useState<UsageLog[]>([]);
@@ -36,13 +37,16 @@ export default function AdminPage({ isAdmin, user }: AdminPageProps) {
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    if (!isAdmin || user?.email !== 'businessonline.6251@gmail.com' || !user?.emailVerified) {
-      window.location.href = '/user.html';
+    // Only redirect if auth loading is finished and user is not an admin
+    if (!isLoadingAuth) {
+      if (!isAdmin || user?.email !== 'businessonline.6251@gmail.com') {
+        window.location.href = '/user.html';
+      }
     }
-  }, [isAdmin, user]);
+  }, [isAdmin, user, isLoadingAuth]);
 
   const fetchAdminData = async () => {
-    if (!isAdmin) return;
+    if (!isAdmin || isLoadingAuth) return;
     
     try {
       setIsLoading(true);

@@ -1143,7 +1143,7 @@ export default function App() {
 
   return (
     <Routes>
-      <Route path="/admin.html" element={<AdminPage isAdmin={isAdmin} user={user} />} />
+      <Route path="/admin.html" element={<AdminPage isAdmin={isAdmin} user={user} isLoadingAuth={isLoadingAuth} />} />
       <Route path="/login.html" element={<LoginPage />} />
       <Route path="/user.html" element={
         <div 
