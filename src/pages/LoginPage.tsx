@@ -4,6 +4,27 @@ import { loginWithGoogle } from '../firebase';
 import { motion } from 'motion/react';
 
 export default function LoginPage() {
+  const [error, setError] = React.useState<string | null>(null);
+  const [loading, setLoading] = React.useState(false);
+
+  const handleLogin = async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      await loginWithGoogle();
+      window.location.href = '/user.html';
+    } catch (err: any) {
+      console.error('Login error:', err);
+      if (err.code === 'auth/unauthorized-domain') {
+        setError('This domain is not authorized in Firebase. Please add "tanbhir-csv-pro.netlify.app" to your Firebase Authorized Domains.');
+      } else {
+        setError(err.message || 'An error occurred during login.');
+      }
+    } finally {
+      setLoading(false);
+    }
+  };
+
   return (
     <div className="min-h-screen bg-[#0f172a] flex items-center justify-center p-4 font-sans">
       <motion.div 
@@ -18,12 +39,25 @@ export default function LoginPage() {
         <h1 className="text-4xl font-black text-white mb-3 tracking-tight">Welcome Back</h1>
         <p className="text-white/40 mb-10 text-lg">Login to access your SEO Metadata Generator dashboard.</p>
         
+        {error && (
+          <div className="mb-6 p-4 bg-red-500/10 border border-red-500/20 rounded-xl text-red-500 text-sm font-medium">
+            {error}
+          </div>
+        )}
+        
         <button 
-          onClick={() => loginWithGoogle()}
-          className="w-full py-5 bg-white text-black font-black rounded-2xl flex items-center justify-center gap-4 transition-all hover:bg-white/90 shadow-2xl shadow-white/5 active:scale-[0.98]"
+          onClick={handleLogin}
+          disabled={loading}
+          className="w-full py-5 bg-white text-black font-black rounded-2xl flex items-center justify-center gap-4 transition-all hover:bg-white/90 shadow-2xl shadow-white/5 active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed"
         >
-          <img src="https://www.google.com/favicon.ico" className="w-6 h-6" alt="Google" />
-          <span className="text-lg">Continue with Google</span>
+          {loading ? (
+            <div className="w-6 h-6 border-2 border-black/20 border-t-black rounded-full animate-spin" />
+          ) : (
+            <>
+              <img src="https://www.google.com/favicon.ico" className="w-6 h-6" alt="Google" />
+              <span className="text-lg">Continue with Google</span>
+            </>
+          )}
         </button>
         
         <div className="mt-12 pt-8 border-t border-white/5">
